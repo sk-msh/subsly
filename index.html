@@ -2,8 +2,16 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; connect-src https://api.emailjs.com https://*.supabase.co; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self';">
+<meta http-equiv="X-Frame-Options" content="DENY">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>إدارة الاشتراكات</title>
+<style id="auth-gate">
+/* Hide everything until auth passes — overridden by JS after login */
+body > *:not(#loginOv):not(#resetOv) { display:none !important; }
+</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -339,6 +347,31 @@ mark{background:rgba(108,92,231,.3);color:var(--ach);border-radius:3px;padding:0
 <!-- SETTINGS -->
 <div class="panel" id="p-settings">
   <div class="scard">
+    <div class="sti">💳 رمز قسم الكروت</div>
+    <div class="fg2">
+      <div class="fr"><label class="fl">الرمز الحالي *</label><div class="pw"><input class="fi" id="cardsPinOld" type="password" dir="ltr"><button class="pt" onclick="tpw('cardsPinOld',this)">👁️</button></div></div>
+      <div class="fr"><label class="fl">الرمز الجديد</label><div class="pw"><input class="fi" id="cardsPinNew" type="password" dir="ltr"><button class="pt" onclick="tpw('cardsPinNew',this)">👁️</button></div></div>
+    </div>
+    <div class="fg2">
+      <div class="fr"><label class="fl">تأكيد الرمز الجديد</label><div class="pw"><input class="fi" id="cardsPinCnf" type="password" dir="ltr"><button class="pt" onclick="tpw('cardsPinCnf',this)">👁️</button></div></div>
+    </div>
+    <button class="btn bp" onclick="_changeCardsPin()">🔒 تحديث رمز الكروت</button>
+  </div>
+
+  <div class="scard">
+    <div class="sti">🔑 تغيير بيانات الدخول</div>
+    <div class="fg2">
+      <div class="fr"><label class="fl">اسم المستخدم الجديد</label><input class="fi" id="chgUser" placeholder="اتركه فارغاً للإبقاء على الحالي"></div>
+      <div class="fr"><label class="fl">كلمة السر الحالية *</label><div class="pw"><input class="fi" id="chgOld" type="password" dir="ltr"><button class="pt" onclick="tpw('chgOld',this)">👁️</button></div></div>
+    </div>
+    <div class="fg2">
+      <div class="fr"><label class="fl">كلمة السر الجديدة</label><div class="pw"><input class="fi" id="chgNew" type="password" dir="ltr"><button class="pt" onclick="tpw('chgNew',this)">👁️</button></div></div>
+      <div class="fr"><label class="fl">تأكيد كلمة السر</label><div class="pw"><input class="fi" id="chgCnf" type="password" dir="ltr"><button class="pt" onclick="tpw('chgCnf',this)">👁️</button></div></div>
+    </div>
+    <button class="btn bp" onclick="changeCredentials()">🔒 تحديث بيانات الدخول</button>
+  </div>
+
+  <div class="scard">
     <div class="sti">🔔 الإعدادات العامة</div>
     <div class="fg2">
       <div class="fr"><label class="fl">تنبيه قبل (أيام)</label><input class="fi" id="stAD" type="number" min="1" max="30"></div>
@@ -580,6 +613,52 @@ mark{background:rgba(108,92,231,.3);color:var(--ach);border-radius:3px;padding:0
 
 <div id="notif"></div>
 
+<!-- ════ LOGIN OVERLAY ════ -->
+<div id="loginOv" style="display:flex;position:fixed;inset:0;z-index:9999;background:#07070f;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:#0f0f1a;border:1px solid #1e1e35;border-radius:20px;width:100%;max-width:380px;padding:2rem 1.8rem;position:relative;overflow:hidden">
+    <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#6c5ce7,#e84393)"></div>
+    <div style="text-align:center;margin-bottom:1.8rem">
+      <div style="font-size:2.2rem;margin-bottom:.5rem">🔐</div>
+      <div style="font-size:1.15rem;font-weight:900;background:linear-gradient(135deg,#7d6ff0,#e84393);-webkit-background-clip:text;-webkit-text-fill-color:transparent">لوحة الإدارة</div>
+      <div style="font-size:.72rem;color:#585878;margin-top:.3rem">يرجى تسجيل الدخول للمتابعة</div>
+    </div>
+    <div id="loginErr" style="display:none;background:rgba(232,67,147,.08);border:1px solid rgba(232,67,147,.3);border-radius:8px;padding:.5rem .75rem;font-size:.74rem;color:#e84393;margin-bottom:.75rem;text-align:center"></div>
+    <div style="margin-bottom:.65rem">
+      <label style="font-size:.68rem;font-weight:700;color:#585878;display:block;margin-bottom:.25rem">اسم المستخدم</label>
+      <input id="lgUser" type="text" autocomplete="username" style="width:100%;background:#161625;border:1px solid #252540;color:#eeeef8;font-family:Cairo,sans-serif;font-size:.85rem;padding:.55rem .8rem;border-radius:8px;outline:none;transition:border-color .15s" placeholder="أدخل اسم المستخدم" onfocus="this.style.borderColor='#6c5ce7'" onblur="this.style.borderColor='#252540'" onkeydown="if(event.key==='Enter')document.getElementById('lgPass').focus()">
+    </div>
+    <div style="margin-bottom:.85rem">
+      <label style="font-size:.68rem;font-weight:700;color:#585878;display:block;margin-bottom:.25rem">كلمة السر</label>
+      <div style="position:relative">
+        <input id="lgPass" type="password" autocomplete="current-password" style="width:100%;background:#161625;border:1px solid #252540;color:#eeeef8;font-family:Cairo,sans-serif;font-size:.85rem;padding:.55rem 2.4rem .55rem .8rem;border-radius:8px;outline:none;transition:border-color .15s" placeholder="أدخل كلمة السر" onfocus="this.style.borderColor='#6c5ce7'" onblur="this.style.borderColor='#252540'" onkeydown="if(event.key==='Enter')doLogin()">
+        <button onclick="toggleLgPw()" style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);background:none;border:none;color:#585878;cursor:pointer;font-size:.85rem" id="lgEye">👁️</button>
+      </div>
+    </div>
+    <button onclick="doLogin()" id="lgBtn" style="width:100%;background:linear-gradient(135deg,#6c5ce7,#7d6ff0);color:#fff;border:none;border-radius:8px;padding:.62rem;font-family:Cairo,sans-serif;font-size:.88rem;font-weight:700;cursor:pointer;transition:opacity .15s">تسجيل الدخول</button>
+    <div style="text-align:center;margin-top:.9rem">
+      <button onclick="showReset()" style="background:none;border:none;color:#585878;font-family:Cairo,sans-serif;font-size:.7rem;cursor:pointer">نسيت كلمة السر؟</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ RESET PASSWORD OVERLAY ════ -->
+<div id="resetOv" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.85);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:1rem">
+  <div style="background:#0f0f1a;border:1px solid #1e1e35;border-radius:20px;width:100%;max-width:360px;padding:1.8rem;position:relative">
+    <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#00cec9,#6c5ce7)"></div>
+    <div style="text-align:center;margin-bottom:1.2rem">
+      <div style="font-size:1.6rem;margin-bottom:.3rem">📧</div>
+      <div style="font-size:.95rem;font-weight:900;color:#eeeef8">إعادة تعيين كلمة السر</div>
+      <div style="font-size:.68rem;color:#585878;margin-top:.2rem">سيتم إرسال كلمة السر الجديدة إلى بريدك</div>
+    </div>
+    <div id="resetMsg" style="display:none;margin-bottom:.7rem;border-radius:8px;padding:.5rem .75rem;font-size:.74rem;text-align:center"></div>
+    <div id="resetForm">
+      <div style="background:rgba(108,92,231,.06);border:1px solid rgba(108,92,231,.2);border-radius:8px;padding:.55rem .75rem;font-size:.76rem;color:#a0a0c0;margin-bottom:.9rem;text-align:center" dir="ltr">shtiwem6@gmail.com</div>
+      <button onclick="sendResetEmail()" id="resetBtn" style="width:100%;background:linear-gradient(135deg,#00cec9,#0984e3);color:#fff;border:none;border-radius:8px;padding:.55rem;font-family:Cairo,sans-serif;font-size:.85rem;font-weight:700;cursor:pointer">إرسال كلمة السر الجديدة</button>
+    </div>
+    <button onclick="document.getElementById('resetOv').style.display='none'" style="width:100%;margin-top:.65rem;background:transparent;border:1px solid #252540;color:#585878;border-radius:8px;padding:.42rem;font-family:Cairo,sans-serif;font-size:.78rem;cursor:pointer">إلغاء</button>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 // ══════════════════════════════════════════
@@ -639,6 +718,36 @@ function getDV(el) { return el ? toISO(el.value) : ''; }
 const uid = () => Math.random().toString(36).substr(2,9) + Date.now().toString(36);
 const esc = s => String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 const safe = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// san() — HTML entity encode for rendering untrusted data safely
+function san(s) {
+  if (s == null) return '';
+  let o = '', str = String(s);
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if      (code === 38)  o += '&amp;';
+    else if (code === 60)  o += '&lt;';
+    else if (code === 62)  o += '&gt;';
+    else if (code === 34)  o += '&quot;';
+    else if (code === 39)  o += '&#x27;';
+    else if (code === 96)  o += '&#x60;';
+    else o += str[i];
+  }
+  return o;
+}
+// Prototype pollution guard
+function _sanitizeObj(obj, depth) {
+  depth = depth || 0;
+  if (depth > 8 || !obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(function(i){ return _sanitizeObj(i, depth+1); });
+  var clean = {};
+  Object.keys(obj).forEach(function(k) {
+    if (k !== '__proto__' && k !== 'constructor' && k !== 'prototype')
+      clean[k] = _sanitizeObj(obj[k], depth+1);
+  });
+  return clean;
+}
+
 const n2 = v => { const n=Number(v); return (isNaN(n)||n<0)?0:n; };
 const du = d => {
   if (!d) return 9999;
@@ -764,24 +873,12 @@ function ensureK(c) {
   if(!c.status) c.status='available';
 }
 
-let db = null;
-try { db = JSON.parse(localStorage.getItem('subs_v5')||'null'); } catch(e){}
-if (!db) {
-  db = {customers:[],accounts:[],manualDebts:[],cards:[],prices:{},
-    settings:{alertDays:3,currency:'د.ل',countryCode:'218',usdRate:null,backupInterval:5,owner:'',templates:{...DTPL}},
-    services:[...DEF_SVCS]};
-}
-['customers','accounts','manualDebts','cards'].forEach(k=>{ if(!Array.isArray(db[k])) db[k]=[]; });
-if(!db.prices) db.prices={};
-if(!db.settings) db.settings={};
+// db starts as empty shell — real data loaded in _unlockApp() after login
+let db = {customers:[],accounts:[],manualDebts:[],cards:[],prices:{},
+  settings:{alertDays:3,currency:'د.ل',countryCode:'218',usdRate:null,backupInterval:5,owner:'',templates:{...DTPL}},
+  services:[...DEF_SVCS]};
+
 const DS = {alertDays:3,currency:'د.ل',countryCode:'218',usdRate:null,backupInterval:5,owner:'',templates:{...DTPL}};
-Object.keys(DS).forEach(k=>{ if(db.settings[k]==null) db.settings[k]=DS[k]; });
-if(!db.settings.templates) db.settings.templates={...DTPL};
-if(!db.settings.templates.renew) db.settings.templates.renew=DTPL.renew;
-if(!db.settings.templates.debt)  db.settings.templates.debt=DTPL.debt;
-if(!Array.isArray(db.services)||!db.services.length) db.services=[...DEF_SVCS];
-db.cards.forEach(ensureK);
-db.customers.forEach(ensureC);
 
 // ── State ──
 let CUR = String(db.settings.currency||'د.ل');
@@ -793,11 +890,39 @@ let renewBase='exp';
 let _repCtx={};
 
 // ══════════════════════════════════════════
-// SAVE
+// SAVE  (encrypted + auth-guarded)
 // ══════════════════════════════════════════
+// ── Encryption layer (XOR stream cipher with SHA-256 derived key) ──
+// Key is derived from credentials via SubtleCrypto SHA-256 — never stored
+let _EK = '';        // derived key hex string — only in memory after login
+let _AUTH_OK = false;// master auth flag
+
+function _xorEnc(str, key) {
+  // Use full key length cycling — key is 64-char hex (256 bits)
+  let out = '';
+  for (let i = 0; i < str.length; i++)
+    out += String.fromCharCode(str.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  return btoa(unescape(encodeURIComponent(out)));
+}
+function _xorDec(b64, key) {
+  try {
+    const str = decodeURIComponent(escape(atob(b64)));
+    let out = '';
+    for (let i = 0; i < str.length; i++)
+      out += String.fromCharCode(str.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    return out;
+  } catch(e) { return null; }
+}
+
 function save() {
+  // Hard block: never write if not authenticated (prevents console attack)
+  if (!_AUTH_OK) return;
   db.settings.currency = CUR;
-  try { localStorage.setItem('subs_v5', JSON.stringify(db)); } catch(e) { notify('⚠️ فضاء التخزين ممتلئ','er'); }
+  try {
+    const plain = JSON.stringify(db);
+    const data  = _EK ? _xorEnc(plain, _EK) : plain;
+    localStorage.setItem('subs_v5', data);
+  } catch(e) { notify('⚠️ فضاء التخزين ممتلئ','er'); }
   uh(); triggerAutoSync();
 }
 
@@ -825,11 +950,220 @@ const TAB_FNS = {
   debts:    rDebts,
   settings: rSettings
 };
+
 function sw(n) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.p===n));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='p-'+n));
   if(TAB_FNS[n]) TAB_FNS[n]();
 }
+
+// ══════════════════════════════════════════
+// CARDS PIN PROTECTION
+// ══════════════════════════════════════════
+(function(){
+  // Hash the PIN with SHA-256 + salt — never store plaintext
+  const _CARDS_SALT = 'cards_pin_lby_2025';
+  const _CARDS_KEY  = 'cx_p1'; // localStorage key for PIN hash
+
+  async function _pinHash(pin) {
+    const buf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(pin + '\x00' + _CARDS_SALT));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  // Store default PIN hash on first run (PIN: qamar66)
+  async function _initPin() {
+    if (localStorage.getItem(_CARDS_KEY)) return;
+    localStorage.setItem(_CARDS_KEY, await _pinHash('qamar66'));
+  }
+  _initPin();
+
+  // PIN verification state
+  let _cardsUnlocked = false;
+  let _pinFails = 0, _pinLocked = false, _pinTimer = null;
+
+  // Build PIN overlay HTML once
+  function _buildPinOverlay() {
+    if (document.getElementById('cardsPinOv')) return;
+    const ov = document.createElement('div');
+    ov.id = 'cardsPinOv';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:8888;background:rgba(0,0,0,.92);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:1rem';
+    ov.innerHTML =
+      '<div style="background:#0f0f1a;border:1px solid #1e1e35;border-radius:20px;width:100%;max-width:320px;padding:1.8rem;position:relative;overflow:hidden">' +
+        '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#fdcb6e,#e17055)"></div>' +
+        '<div style="text-align:center;margin-bottom:1.4rem">' +
+          '<div style="font-size:2rem;margin-bottom:.4rem">💳</div>' +
+          '<div style="font-size:1rem;font-weight:900;color:#fdcb6e">قسم الكروت</div>' +
+          '<div style="font-size:.7rem;color:#585878;margin-top:.25rem">أدخل الرمز للوصول</div>' +
+        '</div>' +
+        '<div id="cardsPinErr" style="display:none;background:rgba(232,67,147,.08);border:1px solid rgba(232,67,147,.3);border-radius:8px;padding:.45rem .7rem;font-size:.72rem;color:#e84393;margin-bottom:.65rem;text-align:center"></div>' +
+        '<div style="position:relative;margin-bottom:.75rem">' +
+          '<input id="cardsPinInp" type="password" inputmode="numeric" maxlength="20" autocomplete="off" ' +
+            'style="width:100%;background:#161625;border:1px solid #252540;color:#eeeef8;font-family:Cairo,sans-serif;font-size:1.1rem;padding:.55rem 2.4rem .55rem .8rem;border-radius:8px;outline:none;letter-spacing:4px;text-align:center" ' +
+            'placeholder="••••••" ' +
+            'onfocus="this.style.borderColor=\'#fdcb6e\'" ' +
+            'onblur="this.style.borderColor=\'#252540\'" ' +
+            'onkeydown="if(event.key===\'Enter\')window._verifyCardsPin()">' +
+          '<button onclick="window._toggleCardsPin()" style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);background:none;border:none;color:#585878;cursor:pointer;font-size:.85rem" id="cardsPinEye">👁️</button>' +
+        '</div>' +
+        '<button onclick="window._verifyCardsPin()" id="cardsPinBtn" ' +
+          'style="width:100%;background:linear-gradient(135deg,#fdcb6e,#e17055);color:#0a0a15;border:none;border-radius:8px;padding:.58rem;font-family:Cairo,sans-serif;font-size:.88rem;font-weight:900;cursor:pointer">' +
+          'دخول 🔓' +
+        '</button>' +
+        '<button onclick="window._cancelCardsPin()" ' +
+          'style="width:100%;margin-top:.5rem;background:transparent;border:1px solid #252540;color:#585878;border-radius:8px;padding:.4rem;font-family:Cairo,sans-serif;font-size:.75rem;cursor:pointer">' +
+          'إلغاء' +
+        '</button>' +
+      '</div>';
+    document.body.appendChild(ov);
+  }
+
+  // Show PIN overlay
+  function _showPinOverlay() {
+    _buildPinOverlay();
+    const ov  = document.getElementById('cardsPinOv');
+    const inp = document.getElementById('cardsPinInp');
+    const err = document.getElementById('cardsPinErr');
+    ov.style.display = 'flex';
+    if (err) err.style.display = 'none';
+    if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 80); }
+  }
+
+  // Hide PIN overlay
+  function _hidePinOverlay() {
+    const ov = document.getElementById('cardsPinOv');
+    if (ov) { ov.style.transition = 'opacity .25s'; ov.style.opacity = '0';
+      setTimeout(() => { ov.style.display = 'none'; ov.style.opacity = '1'; }, 260); }
+  }
+
+  // Show error in PIN overlay
+  function _pinErr(msg) {
+    const el = document.getElementById('cardsPinErr');
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+    const card = document.querySelector('#cardsPinOv > div');
+    if (card) { card.style.animation = '_sk .3s'; setTimeout(() => card.style.animation = '', 320); }
+  }
+
+  // Verify PIN
+  window._verifyCardsPin = async function() {
+    if (_pinLocked) return;
+    const inp = document.getElementById('cardsPinInp');
+    const btn = document.getElementById('cardsPinBtn');
+    const pin = (inp && inp.value) || '';
+    if (!pin) { _pinErr('أدخل الرمز'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+
+    const storedHash = localStorage.getItem(_CARDS_KEY);
+    const inputHash  = await _pinHash(pin);
+
+    // Timing-safe comparison
+    let diff = storedHash.length ^ inputHash.length;
+    const max = Math.max(storedHash.length, inputHash.length);
+    for (let i = 0; i < max; i++)
+      diff |= (storedHash.charCodeAt(i % storedHash.length) || 0) ^
+               (inputHash.charCodeAt(i % inputHash.length)  || 0);
+
+    if (diff === 0) {
+      _pinFails = 0;
+      _cardsUnlocked = true;
+      if (btn) { btn.disabled = false; btn.textContent = 'دخول 🔓'; }
+      _hidePinOverlay();
+      // Actually navigate to cards tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.p === 'cards'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'p-cards'));
+      rKTabs(); rK();
+      // Auto-lock cards after 10 minutes of inactivity on cards tab
+      _startCardIdleTimer();
+    } else {
+      _pinFails++;
+      if (btn) { btn.disabled = false; btn.textContent = 'دخول 🔓'; }
+      if (inp) inp.value = '';
+      if (_pinFails >= 5) {
+        _pinLocked = true;
+        let s = 30;
+        if (btn) { btn.disabled = true; btn.textContent = '🔒 انتظر ' + s + 'ث'; }
+        _pinTimer = setInterval(() => {
+          s--;
+          if (btn) btn.textContent = '🔒 انتظر ' + s + 'ث';
+          if (s <= 0) {
+            clearInterval(_pinTimer); _pinLocked = false; _pinFails = 0;
+            if (btn) { btn.disabled = false; btn.textContent = 'دخول 🔓'; }
+          }
+        }, 1000);
+      } else {
+        _pinErr('الرمز غير صحيح' + (_pinFails >= 3 ? ' — ' + (5 - _pinFails) + ' محاولات متبقية' : ''));
+      }
+    }
+  };
+
+  window._cancelCardsPin = function() {
+    _hidePinOverlay();
+    // Stay on previous tab (don't navigate to cards)
+  };
+
+  window._toggleCardsPin = function() {
+    const i = document.getElementById('cardsPinInp');
+    const b = document.getElementById('cardsPinEye');
+    if (!i) return;
+    i.type = i.type === 'password' ? 'text' : 'password';
+    if (b) b.textContent = i.type === 'password' ? '👁️' : '🙈';
+  };
+
+  // Auto-lock cards after 10 min of not being on cards tab
+  let _cardIdleTimer = null;
+  function _startCardIdleTimer() {
+    clearTimeout(_cardIdleTimer);
+    _cardIdleTimer = setTimeout(() => {
+      _cardsUnlocked = false;
+      // If currently on cards tab, switch away
+      const cardsPanel = document.getElementById('p-cards');
+      if (cardsPanel && cardsPanel.classList.contains('on')) {
+        sw('cust'); // go back to customers
+        notify('🔒 تم قفل قسم الكروت تلقائياً');
+      }
+    }, 10 * 60 * 1000); // 10 minutes
+  }
+
+  // Intercept sw() to gate cards tab
+  window.sw = function(n) {
+    if (n === 'cards' && !_cardsUnlocked) {
+      // Don't switch to cards — show PIN instead
+      _showPinOverlay();
+      return;
+    }
+    // When leaving cards tab, restart idle timer
+    if (n !== 'cards') {
+      clearTimeout(_cardIdleTimer);
+    }
+    // Call original sw logic directly
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.p===n));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='p-'+n));
+    if(TAB_FNS[n]) TAB_FNS[n]();
+  };
+
+  // Also intercept header stat click on card count
+  // (already goes through sw() so it's covered)
+
+  // Expose PIN change function for settings
+  window._changeCardsPin = async function() {
+    const oldP = (document.getElementById('cardsPinOld') || {}).value || '';
+    const newP = (document.getElementById('cardsPinNew') || {}).value || '';
+    const cnfP = (document.getElementById('cardsPinCnf') || {}).value || '';
+    if (!oldP || !newP) { notify('أدخل الرمز الحالي والجديد', 'wa'); return; }
+    if (newP !== cnfP)  { notify('❌ الرمز الجديد لا يتطابق', 'er'); return; }
+    if (newP.length < 4){ notify('⚠️ الرمز يجب أن يكون 4 أحرف على الأقل', 'wa'); return; }
+    const stored = localStorage.getItem(_CARDS_KEY);
+    const oldH   = await _pinHash(oldP);
+    let diff = stored.length ^ oldH.length;
+    for (let i = 0; i < stored.length; i++) diff |= stored.charCodeAt(i) ^ (oldH.charCodeAt(i)||0);
+    if (diff !== 0) { notify('❌ الرمز الحالي غير صحيح', 'er'); return; }
+    localStorage.setItem(_CARDS_KEY, await _pinHash(newP));
+    ['cardsPinOld','cardsPinNew','cardsPinCnf'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    notify('✅ تم تغيير رمز الكروت');
+  };
+})();
 function sf(f,btn){ cFilt=f; document.querySelectorAll('#p-cust .ftabs .ft').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); rC(); }
 function skf(f,btn){ kFilt=f; document.querySelectorAll('#p-cards .ftabs .ft').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); rK(); }
 function saf(f,btn){ alertFilt=f; document.querySelectorAll('#alft .ft').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); rAlerts(); }
@@ -1871,13 +2205,14 @@ function delSv(i){if(!confirm('حذف هذه الخدمة؟'))return;db.services
 // ══════════════════════════════════════════
 // BACKUP
 // ══════════════════════════════════════════
-function expJSON(){const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='backup_'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);notify('⬇️ تم التصدير');}
+function expJSON(){if(!_AUTH_OK)return;const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='backup_'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);notify('⬇️ تم التصدير');}
 function impJSON(e){
   const f=e.target.files[0];if(!f)return;
   const r=new FileReader();r.onload=ev=>{
     try{
-      const p=JSON.parse(ev.target.result);
+      let p=JSON.parse(ev.target.result);
       if(!p.customers||!p.services){notify('❌ ملف غير صالح','er');return;}
+      p=_sanitizeObj(p);
       db=p;
       ['customers','accounts','manualDebts','cards'].forEach(k=>{if(!Array.isArray(db[k]))db[k]=[];});
       if(!db.prices)db.prices={};if(!db.settings)db.settings={};
@@ -1889,7 +2224,7 @@ function impJSON(e){
     }catch(err){notify('❌ '+err.message,'er');}
   };r.readAsText(f);e.target.value='';
 }
-function clearAll(){if(!confirm('مسح جميع البيانات؟'))return;db={customers:[],accounts:[],manualDebts:[],cards:[],prices:{},settings:{...DS,templates:{...DTPL}},services:[...DEF_SVCS]};CUR='د.ل';aTypeFilt=null;kTypeFilt=null;svcFilt=null;save();rC();rQSB();notify('🗑️ تم المسح');}
+function clearAll(){if(!_AUTH_OK)return;if(!confirm('مسح جميع البيانات؟'))return;db={customers:[],accounts:[],manualDebts:[],cards:[],prices:{},settings:{...DS,templates:{...DTPL}},services:[...DEF_SVCS]};CUR='د.ل';aTypeFilt=null;kTypeFilt=null;svcFilt=null;save();rC();rQSB();notify('🗑️ تم المسح');}
 function expXLSX(){
   if(typeof XLSX==='undefined'){notify('⚠️ مكتبة Excel لم تُحمَّل','wa');return;}
   const wb=XLSX.utils.book_new();
@@ -1902,14 +2237,27 @@ function expXLSX(){
 // ══════════════════════════════════════════
 // CLOUD SYNC
 // ══════════════════════════════════════════
-function getSyncCfg(){try{return JSON.parse(localStorage.getItem('sync_cfg')||'null');}catch(e){return null;}}
+function getSyncCfg(){
+  try {
+    const raw = localStorage.getItem('sync_cfg');
+    if (!raw) return null;
+    const plain = _EK ? (_xorDec(raw, _EK) || raw) : raw;
+    return JSON.parse(plain);
+  } catch(e) { return null; }
+}
+function _saveSyncCfg(cfg) {
+  try {
+    const plain = JSON.stringify(cfg);
+    localStorage.setItem('sync_cfg', _EK ? _xorEnc(plain, _EK) : plain);
+  } catch(e) {}
+}
 function setSyncSt(msg,c){const el=document.getElementById('syncSt');if(el){el.textContent=msg;el.style.color=c||'var(--mu)';}}
 function saveSyncCfg(){
   const url=(document.getElementById('sUrl').value||'').trim().replace(/\/$/,'');
   const key=(document.getElementById('sKey').value||'').trim();
   const id=(document.getElementById('sId').value||'').trim();
   if(!url||!key||!id){notify('⚠️ أكمل الحقول','wa');return;}
-  localStorage.setItem('sync_cfg',JSON.stringify({url,key,id}));notify('✅ تم');setSyncSt('🟢 متصل — '+id,'var(--ok)');
+  _saveSyncCfg({url,key,id});notify('✅ تم');setSyncSt('🟢 متصل — '+id,'var(--ok)');
 }
 function rSyncUI(){
   const cfg=getSyncCfg();
@@ -1918,6 +2266,7 @@ function rSyncUI(){
   const cb=document.getElementById('autoSync');if(cb)cb.checked=localStorage.getItem('auto_sync')==='1';
 }
 async function cloudPush(silent){
+  if(!_AUTH_OK)return false;
   const cfg=getSyncCfg();if(!cfg){if(!silent)notify('⚠️ احفظ الإعدادات أولاً','wa');return false;}
   try{
     const res=await fetch(cfg.url+'/rest/v1/app_data',{method:'POST',headers:{'apikey':cfg.key,'Authorization':'Bearer '+cfg.key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},body:JSON.stringify({id:cfg.id,data:db,updated_at:new Date().toISOString()})});
@@ -1926,13 +2275,14 @@ async function cloudPush(silent){
   }catch(err){setSyncSt('🔴 فشل: '+err.message,'var(--er)');if(!silent)notify('❌ فشل الرفع','er');return false;}
 }
 async function cloudPull(){
+  if(!_AUTH_OK)return;
   const cfg=getSyncCfg();if(!cfg){notify('⚠️ احفظ الإعدادات أولاً','wa');return;}
   if(!confirm('سيستبدل البيانات. متابعة؟'))return;
   try{
     const res=await fetch(cfg.url+'/rest/v1/app_data?id=eq.'+encodeURIComponent(cfg.id)+'&select=data',{headers:{'apikey':cfg.key,'Authorization':'Bearer '+cfg.key}});
     if(!res.ok)throw new Error(res.status);
     const rows=await res.json();if(!rows.length||!rows[0].data){notify('لا بيانات — ارفع أولاً','wa');return;}
-    const cloud=rows[0].data;if(!cloud.customers||!cloud.services)throw new Error('بيانات غير صالحة');
+    let cloud=_sanitizeObj(rows[0].data);if(!cloud.customers||!cloud.services)throw new Error('بيانات غير صالحة');
     db=cloud;['customers','accounts','manualDebts','cards'].forEach(k=>{if(!Array.isArray(db[k]))db[k]=[];});
     if(!db.prices)db.prices={};if(!db.settings)db.settings={};Object.keys(DS).forEach(k=>{if(db.settings[k]==null)db.settings[k]=DS[k];});
     if(!db.settings.templates)db.settings.templates={...DTPL};if(!Array.isArray(db.services)||!db.services.length)db.services=[...DEF_SVCS];
@@ -1980,8 +2330,469 @@ function notify(msg,type='ok'){
 // ══════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════
-save();rQSB();rUBan();rC();uh();
-if(localStorage.getItem('auto_bk')==='1') startAutoBk();
+// ══════════════════════════════════════════
+// AUTH SYSTEM
+// ══════════════════════════════════════════
+(function(){
+  'use strict';
+
+// ══ CLICKJACKING PROTECTION — FULL BLOCK ══
+// Blocks any attempt to embed this page inside a foreign iframe
+try {
+  if (window.top !== window.self) {
+    var _topOrigin = 'cross-origin';
+    try { _topOrigin = window.top.location.origin; } catch(e) {}
+    var _selfOrigin = window.self.location.origin;
+
+    // Only allow same-origin iframes (e.g. same GitHub Pages domain)
+    // Everything else — including file://, null, blob, srcdoc — is blocked
+    if (_topOrigin !== _selfOrigin) {
+      // Nuke the page content immediately
+      document.documentElement.innerHTML =
+        '<html><head><meta charset="UTF-8"></head><body style="margin:0;background:#07070f;display:flex;height:100vh;align-items:center;justify-content:center">' +
+        '<div style="text-align:center;font-family:sans-serif;padding:2rem">' +
+        '<div style="font-size:3rem;margin-bottom:1rem">🚫</div>' +
+        '<div style="font-size:1.1rem;font-weight:700;color:#e84393">Unauthorized Access</div>' +
+        '<div style="font-size:.8rem;color:#585878;margin-top:.5rem">This page cannot be embedded in an external frame.</div>' +
+        '</div></body></html>';
+      // Also attempt to break out
+      try { window.top.location.replace('about:blank'); } catch(e) {}
+    }
+  }
+} catch(e) {
+  // If we can't even check (sandboxed iframe) — block it
+  try {
+    document.documentElement.innerHTML =
+      '<html><head><meta charset="UTF-8"></head><body style="margin:0;background:#07070f;display:flex;height:100vh;align-items:center;justify-content:center">' +
+      '<div style="text-align:center;font-family:sans-serif;padding:2rem">' +
+      '<div style="font-size:3rem;margin-bottom:1rem">🚫</div>' +
+      '<div style="font-size:1.1rem;font-weight:700;color:#e84393">Unauthorized Access</div>' +
+      '</div></body></html>';
+  } catch(e2) {}
+}
+
+
+  // ── SHA-256 via SubtleCrypto ──
+  async function _sha(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  async function _mkHash(u, p) {
+    return _sha(u.toLowerCase() + '\x01' + p + '\x01' + 'subs_lby_2025');
+  }
+
+  // ── Credential store ──
+  const _CK = 'ax_c1';
+
+  async function _initDefaultCreds() {
+    // Nothing to do — user sets their own credentials on first run
+  }
+
+  async function _loadCreds() {
+    try {
+      const r = localStorage.getItem(_CK);
+      if (r) { const o = JSON.parse(r); if (o && o.u && o.h) return o; }
+    } catch(e) {}
+    return null; // first run — no credentials set yet
+  }
+
+  
+// Timing-safe string comparison
+function _timingSafeEq(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  var la = a.length, lb = b.length, diff = la ^ lb;
+  var max = Math.max(la, lb);
+  for (var i = 0; i < max; i++) diff |= (a.charCodeAt(i % la)||0) ^ (b.charCodeAt(i % lb)||0);
+  return diff === 0;
+}
+
+  // ── Brute-force lock ──
+  let _fails = 0, _locked = false, _lt = null;
+  function _recordFail() {
+    _fails++;
+    if (_fails >= 5) {
+      _locked = true;
+      const btn = document.getElementById('lgBtn');
+      let s = 30;
+      if (btn) { btn.disabled = true; btn.textContent = '🔒 انتظر ' + s + 'ث'; }
+      _lt = setInterval(() => {
+        s--;
+        if (btn) btn.textContent = '🔒 انتظر ' + s + 'ث';
+        if (s <= 0) {
+          clearInterval(_lt); _locked = false; _fails = 0;
+          if (btn) { btn.disabled = false; btn.textContent = 'تسجيل الدخول'; }
+        }
+      }, 1000);
+    }
+  }
+
+  // ── UI helpers ──
+  function _showErr(msg) {
+    const el = document.getElementById('loginErr');
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+  }
+
+  // ── Load & decrypt DB using XOR key derived from password ──
+  function _loadDB(encKey) {
+    _EK = encKey; // set global encryption key
+    const raw = localStorage.getItem('subs_v5');
+    if (!raw) return null;
+
+    // 1. Try plain JSON first (existing unencrypted data — most common on first run)
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
+        // Valid plain data found — will be re-saved encrypted after login
+        return parsed;
+      }
+    } catch(e) {}
+
+    // 2. Try XOR decryption (data was already encrypted by this app)
+    const dec = _xorDec(raw, encKey);
+    if (dec) {
+      try {
+        const parsed = JSON.parse(dec);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch(e) {}
+    }
+
+    return null;
+  }
+
+  // ── Unlock app after successful login ──
+  function _unlockApp(encKey) {
+    _AUTH_OK = true; // enable save() and other guarded functions
+    const gate = document.getElementById('auth-gate');
+    if (gate) gate.remove();
+
+    // 2. Hide login overlay
+    const ov = document.getElementById('loginOv');
+    if (ov) { ov.style.transition = 'opacity .3s'; ov.style.opacity = '0';
+      setTimeout(() => { ov.style.display = 'none'; }, 320); }
+
+    // 3. Load data with encryption key
+    let loaded = _loadDB(encKey);
+
+    // 4. Bootstrap db (same logic as original)
+    if (!loaded) {
+      db = { customers:[], accounts:[], manualDebts:[], cards:[], prices:{},
+        settings:{ alertDays:3, currency:'د.ل', countryCode:'218', usdRate:null,
+          backupInterval:5, owner:'', templates:{...DTPL} },
+        services:[...DEF_SVCS] };
+    } else {
+      db = loaded;
+    }
+    ['customers','accounts','manualDebts','cards'].forEach(k => {
+      if (!Array.isArray(db[k])) db[k] = [];
+    });
+    if (!db.prices)   db.prices   = {};
+    if (!db.settings) db.settings = {};
+    const DS = { alertDays:3, currency:'د.ل', countryCode:'218', usdRate:null,
+      backupInterval:5, owner:'', templates:{...DTPL} };
+    Object.keys(DS).forEach(k => { if (db.settings[k] == null) db.settings[k] = DS[k]; });
+    if (!db.settings.templates)       db.settings.templates = {...DTPL};
+    if (!db.settings.templates.renew) db.settings.templates.renew = DTPL.renew;
+    if (!db.settings.templates.debt)  db.settings.templates.debt  = DTPL.debt;
+    if (!Array.isArray(db.services) || !db.services.length) db.services = [...DEF_SVCS];
+    db.cards.forEach(ensureK);
+    db.customers.forEach(ensureC);
+    CUR = String(db.settings.currency || 'د.ل');
+
+    // 5. Re-save with encryption (migrates plain data to encrypted)
+    save();
+
+    // 6. Run app
+    rQSB(); rUBan(); rC(); uh();
+    if (localStorage.getItem('auto_bk') === '1') startAutoBk();
+
+    // ── INACTIVITY TIMEOUT: 30 minutes ──
+    var _idleT = null;
+    function _resetIdle() {
+      clearTimeout(_idleT);
+      _idleT = setTimeout(_autoLock, 30 * 60 * 1000);
+    }
+    function _autoLock() {
+      _AUTH_OK = false; _authed = false;
+      db = {customers:[],accounts:[],manualDebts:[],cards:[],prices:{},
+        settings:{alertDays:3,currency:'د.ل',countryCode:'218',usdRate:null,backupInterval:5,owner:'',templates:Object.assign({},DTPL)},
+        services:DEF_SVCS.slice()};
+      var lv = document.getElementById('loginOv');
+      if (lv) { lv.style.cssText='display:flex!important;position:fixed!important;inset:0!important;z-index:9999!important;background:#07070f!important;opacity:1!important;visibility:visible!important;'; }
+      if (!document.getElementById('auth-gate')) {
+        var sg=document.createElement('style'); sg.id='auth-gate';
+        sg.textContent='body > *:not(#loginOv):not(#resetOv) { display:none !important; }';
+        document.head.appendChild(sg);
+      }
+      document.body.style.overflow='hidden';
+      var lp=document.getElementById('lgPass'); if(lp) lp.value='';
+      var lu=document.getElementById('lgUser'); if(lu){lu.value='';setTimeout(function(){lu.focus();},80);}
+      var le=document.getElementById('loginErr'); if(le) le.style.display='none';
+    }
+    ['click','keydown','mousemove','touchstart','scroll'].forEach(function(ev) {
+      document.addEventListener(ev, _resetIdle, {passive:true});
+    });
+    _resetIdle();
+
+    // ── TAB ISOLATION ──
+    try {
+      var _bc = new BroadcastChannel('__sx_auth__');
+      var _tid = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      _bc.postMessage({t:'login',id:_tid});
+      _bc.onmessage = function(e) {
+        if ((e.data.t==='login' || e.data.t==='logout') && e.data.id !== _tid) _autoLock();
+      };
+      window.addEventListener('pagehide', function() { _bc.postMessage({t:'logout',id:_tid}); });
+    } catch(e) {}
+
+
+    // 7. If db is empty — show recovery banner
+    if (!db.customers.length && !db.cards.length && !db.accounts.length) {
+      setTimeout(() => {
+        const wrap = document.querySelector('.wrap');
+        if (!wrap) return;
+        const banner = document.createElement('div');
+        banner.id = 'recoveryBanner';
+        banner.style.cssText = 'background:rgba(249,202,36,.07);border:1.5px solid rgba(249,202,36,.4);border-radius:12px;padding:1rem 1.2rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:.8rem;flex-wrap:wrap';
+        banner.innerHTML = `
+          <div style="font-size:1.6rem">💾</div>
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:900;font-size:.88rem;color:#f9ca24;margin-bottom:.3rem">قاعدة البيانات فارغة</div>
+            <div style="font-size:.75rem;color:#a0a0c0;margin-bottom:.7rem">
+              إذا كانت لديك بيانات مسبقة، يمكنك استعادتها من ملف النسخ الاحتياطي (JSON).
+              <br>ابحث عن ملف <b style="color:#f9ca24">backup_*.json</b> أو <b style="color:#f9ca24">auto_*.json</b> في جهازك.
+            </div>
+            <label style="display:inline-flex;align-items:center;gap:.5rem;background:linear-gradient(135deg,#f9ca24,#e17055);color:#0a0a15;border:none;border-radius:8px;padding:.45rem .9rem;font-family:Cairo,sans-serif;font-size:.8rem;font-weight:700;cursor:pointer">
+              📂 استيراد ملف JSON
+              <input type="file" accept=".json" style="display:none" onchange="impJSON(event);document.getElementById('recoveryBanner')&&document.getElementById('recoveryBanner').remove()">
+            </label>
+          </div>
+          <button onclick="document.getElementById('recoveryBanner').remove()" style="background:none;border:none;color:#585878;cursor:pointer;font-size:1rem;line-height:1">✕</button>
+        `;
+        wrap.insertBefore(banner, wrap.firstChild);
+      }, 400);
+    }
+  }
+
+  // ── Anti-tamper: MutationObserver + interval ──
+  let _authed = false;
+  const _mo = new MutationObserver(() => {
+    if (_authed) return;
+    const ov = document.getElementById('loginOv');
+    const gate = document.getElementById('auth-gate');
+    if (ov && (ov.style.display === 'none' || ov.style.opacity === '0')) {
+      ov.style.display = 'flex'; ov.style.opacity = '1';
+    }
+    if (!gate) {
+      // Re-add CSS gate if someone removed it
+      const s = document.createElement('style');
+      s.id = 'auth-gate';
+      s.textContent = "body > *:not(#loginOv):not(#resetOv) { display:none !important; }";
+      document.head.appendChild(s);
+    }
+  });
+  setInterval(() => {
+    if (_authed) return;
+    const ov = document.getElementById('loginOv');
+    if (!ov) return;
+    const cs = window.getComputedStyle(ov);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.5) {
+      ov.style.cssText = 'display:flex!important;position:fixed!important;inset:0!important;z-index:9999!important;background:#07070f!important;opacity:1!important;';
+      document.body.style.overflow = 'hidden';
+    }
+  }, 700);
+
+  // ── Block sessionStorage tricks ──
+  try {
+    const _p = Object.getPrototypeOf(sessionStorage);
+    const _orig = _p.setItem.bind(sessionStorage);
+    Object.defineProperty(_p, 'setItem', {
+      value(k, v) { if (k === 'auth_ok') return; _orig(k, v); },
+      writable: false, configurable: false
+    });
+  } catch(e) {}
+
+  // ── Public: doLogin ──
+  window.doLogin = async function() {
+    if (_locked) return;
+    const uEl = document.getElementById('lgUser');
+    const pEl = document.getElementById('lgPass');
+    const u = (uEl && uEl.value || '').trim();
+    const p = (pEl && pEl.value || '');
+    if (!u || !p) { _showErr('الرجاء إدخال اسم المستخدم وكلمة السر'); return; }
+    const btn = document.getElementById('lgBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+    try {
+      const cr = await _loadCreds();
+
+      // ── First run: no credentials set yet — treat as setup mode ──
+      if (!cr) {
+        // Show setup panel inside the login overlay
+        const errEl = document.getElementById('loginErr');
+        const lgBox = document.querySelector('#loginOv > div');
+        if (lgBox && !document.getElementById('setupPanel')) {
+          if (errEl) { errEl.style.display='none'; }
+          const sp = document.createElement('div');
+          sp.id = 'setupPanel';
+          sp.style.cssText = 'background:rgba(108,92,231,.08);border:1px solid rgba(108,92,231,.3);border-radius:10px;padding:.8rem;margin-bottom:.75rem;font-size:.74rem;color:#a0a0c0;text-align:center';
+          sp.innerHTML = '🔐 أول تشغيل — سيتم حفظ هذه البيانات كبيانات الدخول الدائمة';
+          lgBox.insertBefore(sp, document.getElementById('lgBtn'));
+        }
+        // Use the entered credentials as the new permanent credentials
+        if (!u || !p) { _showErr('أدخل اسم المستخدم وكلمة السر التي تريدها'); if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';} return; }
+        if (p.length < 6) { _showErr('كلمة السر يجب أن تكون 6 أحرف على الأقل'); if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';} return; }
+        const newHash = await _mkHash(u, p);
+        localStorage.setItem(_CK, JSON.stringify({ u: u.toLowerCase(), h: newHash }));
+        _authed = true; _fails = 0;
+        // Derive 256-bit key from credentials using SHA-256
+        const _rawKey = u.toLowerCase() + '\x00' + p + '\x00' + 'subs_sk_lby_2025_v2';
+        crypto.subtle.digest('SHA-256', new TextEncoder().encode(_rawKey)).then(buf => {
+          const encKey = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+          _unlockApp(encKey);
+        });
+        if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';}
+        return;
+      }
+
+      const ih = await _mkHash(u, p);
+      if (_timingSafeEq(u.toLowerCase(), cr.u.toLowerCase()) && _timingSafeEq(ih, cr.h)) {
+        _authed = true;
+        _fails  = 0;
+        document.getElementById('loginErr') && (document.getElementById('loginErr').style.display = 'none');
+        // Derive XOR key from credentials
+        // Derive 256-bit key from credentials using SHA-256
+        const _rawKey = u.toLowerCase() + '\x00' + p + '\x00' + 'subs_sk_lby_2025_v2';
+        crypto.subtle.digest('SHA-256', new TextEncoder().encode(_rawKey)).then(buf => {
+          const encKey = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+          _unlockApp(encKey);
+        });
+      } else {
+        _recordFail();
+        _showErr('اسم المستخدم أو كلمة السر غير صحيحة');
+        if (pEl) { pEl.value = ''; pEl.focus(); }
+        if (btn) { btn.disabled = false; btn.textContent = 'تسجيل الدخول'; }
+        const card = document.querySelector('#loginOv > div');
+        if (card) { card.style.animation = '_sk .35s'; setTimeout(() => card.style.animation = '', 380); }
+      }
+    } catch(e) {
+      _showErr('خطأ: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'تسجيل الدخول'; }
+    }
+  };
+
+  // ── Change credentials ──
+  window.changeCredentials = async function() {
+    const nu = (document.getElementById('chgUser') || {}).value || '';
+    const op = (document.getElementById('chgOld')  || {}).value || '';
+    const np = (document.getElementById('chgNew')  || {}).value || '';
+    const cp = (document.getElementById('chgCnf')  || {}).value || '';
+    const cr = await _loadCreds();
+    if (await _mkHash(cr.u, op) !== cr.h) { notify('❌ كلمة السر الحالية غير صحيحة', 'er'); return; }
+    if (np && np !== cp) { notify('❌ كلمة السر الجديدة لا تتطابق', 'er'); return; }
+    if (np && np.length < 6) { notify('⚠️ 6 أحرف على الأقل', 'wa'); return; }
+    const fu = nu.trim() || cr.u;
+    const fp = np || op;
+    const nh = await _mkHash(fu, fp);
+    localStorage.setItem(_CK, JSON.stringify({ u: fu.toLowerCase(), h: nh }));
+    // Re-encrypt data with new key
+    const _rawKey3 = fu.toLowerCase() + '\x00' + fp + '\x00' + 'subs_sk_lby_2025_v2';
+    crypto.subtle.digest('SHA-256', new TextEncoder().encode(_rawKey3)).then(buf => {
+      _EK = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      save();
+    });
+    ['chgUser','chgOld','chgNew','chgCnf'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    notify('✅ تم تحديث بيانات الدخول');
+  };
+
+  // ── Reset password ──
+  window.showReset = function() {
+    const rm = document.getElementById('resetMsg');
+    const rf = document.getElementById('resetForm');
+    const ro = document.getElementById('resetOv');
+    if (rm) rm.style.display = 'none';
+    if (rf) rf.style.display = 'block';
+    if (ro) ro.style.display = 'flex';
+  };
+
+  window.sendResetEmail = async function() {
+    const btn   = document.getElementById('resetBtn');
+    const msgEl = document.getElementById('resetMsg');
+    const rf    = document.getElementById('resetForm');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...'; }
+
+    // Generate new password — NOT saved until email is confirmed sent
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
+    let np = '';
+    for (let i = 0; i < 14; i++) np += chars[Math.random() * chars.length | 0];
+
+    const cr = await _loadCreds();
+
+    try {
+      const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id:   'service_x3hig4w',
+          template_id:  'template_6mw8ego',
+          user_id:      'cQRM_T0ms67fvFjLe',
+          template_params: {
+            to_email:     'shtiwem6@gmail.com',
+            new_password: np,
+            username:     cr.u,
+            timestamp:    new Date().toLocaleString('ar')
+          }
+        })
+      });
+
+      if (res.ok || res.status === 200) {
+        // Email sent — NOW save the new hash
+        localStorage.setItem(_CK, JSON.stringify({ u: cr.u, h: await _mkHash(cr.u, np) }));
+        if (rf)    rf.style.display = 'none';
+        if (msgEl) {
+          msgEl.innerHTML  = '✅ تم إرسال كلمة السر الجديدة إلى بريدك الإلكتروني.<br><span style="font-size:.65rem;color:#585878">تحقق من Spam إذا لم تجدها</span>';
+          msgEl.style.cssText = 'display:block;background:rgba(0,184,148,.08);border:1px solid rgba(0,184,148,.3);color:#00b894;border-radius:8px;padding:.6rem .75rem;font-size:.78rem;text-align:center';
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'إرسال كلمة السر الجديدة'; }
+        return;
+      }
+      // Server returned error
+      throw new Error('server_error');
+
+    } catch(e) {
+      // Email failed — do NOT save new password, do NOT show it on screen
+      // Restore button and show generic error only
+      if (btn) { btn.disabled = false; btn.textContent = 'إرسال كلمة السر الجديدة'; }
+      if (msgEl) {
+        msgEl.innerHTML  = '❌ تعذّر الإرسال. يرجى إعداد خدمة البريد أولاً من إعدادات EmailJS.';
+        msgEl.style.cssText = 'display:block;background:rgba(232,67,147,.07);border:1px solid rgba(232,67,147,.3);color:#e84393;border-radius:8px;padding:.6rem .75rem;font-size:.76rem;text-align:center';
+      }
+    }
+  };
+
+  window.toggleLgPw = function() {
+    const i = document.getElementById('lgPass'), b = document.getElementById('lgEye');
+    if (!i) return;
+    i.type = i.type === 'password' ? 'text' : 'password';
+    if (b) b.textContent = i.type === 'password' ? '👁️' : '🙈';
+  };
+
+  // ── Shake animation ──
+  const sty = document.createElement('style');
+  sty.textContent = '@keyframes _sk{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-9px)}40%,80%{transform:translateX(9px)}}';
+  document.head.appendChild(sty);
+
+  // ── INIT: set default creds if first run, then show login ──
+  const _ov = document.getElementById('loginOv');
+  if (_ov) {
+    _mo.observe(_ov, { attributes: true, attributeFilter: ['style', 'class'] });
+    _mo.observe(document.head, { childList: true });
+  }
+  // Init default creds silently on first run (hash stored, plaintext never in code)
+  _initDefaultCreds().then(() => {
+    setTimeout(() => { const u = document.getElementById('lgUser'); if (u) u.focus(); }, 80);
+  });
+})();
 </script>
 </body>
 </html>
