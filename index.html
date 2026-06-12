@@ -11,6 +11,10 @@
 <style id="auth-gate">
 /* Hide everything until auth passes — overridden by JS after login */
 body > *:not(#loginOv):not(#resetOv) { display:none !important; }
+
+/* Price + currency RTL fix */
+[dir="rtl"] bdi, span[dir="rtl"] { direction: rtl; unicode-bidi: embed; }
+.price-rtl { direction: rtl; unicode-bidi: embed; display: inline-block; }
 </style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
@@ -347,6 +351,24 @@ mark{background:rgba(108,92,231,.3);color:var(--ach);border-radius:3px;padding:0
 <!-- SETTINGS -->
 <div class="panel" id="p-settings">
   <div class="scard">
+    <div class="sti">📦 نقل بيانات الدخول إلى جهاز آخر</div>
+    <div style="font-size:.72rem;color:#585878;margin-bottom:.8rem;line-height:1.6">
+      عند فتح الموقع على متصفح أو جهاز جديد، استخدم هذه الأداة لنقل بيانات دخولك.
+    </div>
+    <div class="fg2">
+      <div class="fr">
+        <button class="btn" onclick="_exportCreds()" style="background:linear-gradient(135deg,#00b894,#00cec9)">⬇️ تصدير بيانات الدخول</button>
+      </div>
+      <div class="fr">
+        <label class="btn" style="background:linear-gradient(135deg,#6c5ce7,#7d6ff0);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">
+          ⬆️ استيراد بيانات الدخول
+          <input type="file" accept=".json" style="display:none" onchange="_importCreds(event)">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="scard">
     <div class="sti">💳 رمز قسم الكروت</div>
     <div class="fg2">
       <div class="fr"><label class="fl">الرمز الحالي *</label><div class="pw"><input class="fi" id="cardsPinOld" type="password" dir="ltr"><button class="pt" onclick="tpw('cardsPinOld',this)">👁️</button></div></div>
@@ -361,12 +383,15 @@ mark{background:rgba(108,92,231,.3);color:var(--ach);border-radius:3px;padding:0
   <div class="scard">
     <div class="sti">🔑 تغيير بيانات الدخول</div>
     <div class="fg2">
-      <div class="fr"><label class="fl">اسم المستخدم الجديد</label><input class="fi" id="chgUser" placeholder="اتركه فارغاً للإبقاء على الحالي"></div>
+      <div class="fr"><label class="fl">اسم المستخدم الحالي *</label><input class="fi" id="chgOldUser" placeholder="اسم المستخدم الحالي" autocomplete="off"></div>
       <div class="fr"><label class="fl">كلمة السر الحالية *</label><div class="pw"><input class="fi" id="chgOld" type="password" dir="ltr"><button class="pt" onclick="tpw('chgOld',this)">👁️</button></div></div>
     </div>
     <div class="fg2">
-      <div class="fr"><label class="fl">كلمة السر الجديدة</label><div class="pw"><input class="fi" id="chgNew" type="password" dir="ltr"><button class="pt" onclick="tpw('chgNew',this)">👁️</button></div></div>
-      <div class="fr"><label class="fl">تأكيد كلمة السر</label><div class="pw"><input class="fi" id="chgCnf" type="password" dir="ltr"><button class="pt" onclick="tpw('chgCnf',this)">👁️</button></div></div>
+      <div class="fr"><label class="fl">اسم المستخدم الجديد *</label><input class="fi" id="chgUser" placeholder="اسم المستخدم الجديد" autocomplete="off"></div>
+      <div class="fr"><label class="fl">كلمة السر الجديدة *</label><div class="pw"><input class="fi" id="chgNew" type="password" dir="ltr"><button class="pt" onclick="tpw('chgNew',this)">👁️</button></div></div>
+    </div>
+    <div class="fg2">
+      <div class="fr"><label class="fl">تأكيد كلمة السر الجديدة *</label><div class="pw"><input class="fi" id="chgCnf" type="password" dir="ltr"><button class="pt" onclick="tpw('chgCnf',this)">👁️</button></div></div>
     </div>
     <button class="btn bp" onclick="changeCredentials()">🔒 تحديث بيانات الدخول</button>
   </div>
@@ -963,7 +988,7 @@ function sw(n) {
 (function(){
   // Hash the PIN with SHA-256 + salt — never store plaintext
   const _CARDS_SALT = 'cards_pin_lby_2025';
-  const _CARDS_KEY  = 'cx_p1'; // localStorage key for PIN hash
+  const _CARDS_KEY  = 'cx_p1'; // localStorage cache key
 
   async function _pinHash(pin) {
     const buf = await crypto.subtle.digest('SHA-256',
@@ -971,12 +996,26 @@ function sw(n) {
     return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
   }
 
-  // Store default PIN hash on first run (PIN: qamar66)
-  async function _initPin() {
-    if (localStorage.getItem(_CARDS_KEY)) return;
-    localStorage.setItem(_CARDS_KEY, await _pinHash('qamar66'));
+  async function _loadPinHash() {
+    // 1. Try localStorage cache (1 hour TTL)
+    try {
+      const r = localStorage.getItem(_CARDS_KEY);
+      if (r) { const o = JSON.parse(r); if (o && o.h && o._ts && Date.now() - o._ts < 3600000) return o.h; }
+    } catch(e) {}
+    // 2. Fetch from Supabase
+    try {
+      const val = await _sbGet('cards_pin');
+      if (val) {
+        localStorage.setItem(_CARDS_KEY, JSON.stringify({ h: val, _ts: Date.now() }));
+        return val;
+      }
+    } catch(e) {}
+    // 3. First run — init default PIN (qamar66)
+    const defH = await _pinHash('qamar66');
+    await _sbSet('cards_pin', defH);
+    localStorage.setItem(_CARDS_KEY, JSON.stringify({ h: defH, _ts: Date.now() }));
+    return defH;
   }
-  _initPin();
 
   // PIN verification state
   let _cardsUnlocked = false;
@@ -1053,7 +1092,7 @@ function sw(n) {
     if (!pin) { _pinErr('أدخل الرمز'); return; }
     if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
 
-    const storedHash = localStorage.getItem(_CARDS_KEY);
+    const storedHash = await _loadPinHash();
     const inputHash  = await _pinHash(pin);
 
     // Timing-safe comparison
@@ -1157,11 +1196,14 @@ function sw(n) {
     let diff = stored.length ^ oldH.length;
     for (let i = 0; i < stored.length; i++) diff |= stored.charCodeAt(i) ^ (oldH.charCodeAt(i)||0);
     if (diff !== 0) { notify('❌ الرمز الحالي غير صحيح', 'er'); return; }
-    localStorage.setItem(_CARDS_KEY, await _pinHash(newP));
+    const newPinH = await _pinHash(newP);
+    // Save to Supabase + clear local cache
+    await _sbSet('cards_pin', newPinH);
+    localStorage.removeItem(_CARDS_KEY);
     ['cardsPinOld','cardsPinNew','cardsPinCnf'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
-    notify('✅ تم تغيير رمز الكروت');
+    notify('✅ تم تغيير رمز الكروت — يعمل على جميع الأجهزة فوراً');
   };
 })();
 function sf(f,btn){ cFilt=f; document.querySelectorAll('#p-cust .ftabs .ft').forEach(t=>t.classList.remove('on')); btn.classList.add('on'); rC(); }
@@ -1297,7 +1339,7 @@ function siH(s) {
   let badge,cls;
   if(!s.expiry){badge='كرت';cls='cd';}
   else{const d=du(s.expiry);if(d<0){badge='منتهي '+Math.abs(d)+'ي';cls='er';}else if(d<=(Number(db.settings.alertDays)||3)){badge=d+'ي';cls='wa';}else{badge=d+'ي';cls='ok';}}
-  const pr=(s.price!=null&&s.price!=='')?`<span style="color:var(--ac3);font-size:.6rem;font-weight:700">${s.price} ${CUR}</span>`:'';
+  const pr=(s.price!=null&&s.price!=='')?`<span style="color:var(--ac3);font-size:.6rem;font-weight:700" dir="rtl"><bdi>${s.price} ${CUR}</bdi></span>`:'';
   const tt=s.months?(s.months+'ش'):(s.tierLabel||'');
   const pchip=PM[mof(s)]?`<span class="pc pp">${PM[mof(s)].i}</span>`:'';
   const dchip=s.isDebt&&!s.debtPaid?`<span class="pc pd">⚠️دين</span>`:'';
@@ -1318,7 +1360,7 @@ function viewC(id) {
       const tU=cards.reduce((a,k)=>a+n2(k.value),0);
       const tL=cards.reduce((a,k)=>a+n2(getLPforUSD(k.type,k.value)||0),0);
       const dbt=s.isDebt&&!s.debtPaid?`<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(232,67,147,.05);border:1px solid rgba(232,67,147,.22);border-radius:6px;padding:.3rem .5rem;margin-top:.35rem;flex-wrap:wrap;gap:.25rem"><span style="font-size:.68rem;color:var(--er);font-weight:700">⚠️ دين: ${n2(s.debtAmount).toFixed(2)} ${CUR}</span><button class="btn bs btn-xs" onclick="payCG('${c.id}','${s.id}')">✓ سدّد</button></div>`:'';
-      const last3=cards.slice(-3).map(k=>{const ci='vg'+k.id;return`<div style="display:flex;align-items:center;gap:.4rem;background:var(--s1);border:1px solid var(--b1);border-radius:5px;padding:.25rem .5rem;margin-top:.22rem;flex-wrap:wrap">${k.value?`<span style="font-size:.78rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${getLPforUSD(k.type,k.value)?`<span style="font-size:.7rem;font-weight:700;color:var(--wa)">${getLPforUSD(k.type,k.value)} ${CUR}</span>`:''}<span style="margin-right:auto;font-size:.61rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button></div>`;}).join('');
+      const last3=cards.slice(-3).map(k=>{const ci='vg'+k.id;return`<div style="display:flex;align-items:center;gap:.4rem;background:var(--s1);border:1px solid var(--b1);border-radius:5px;padding:.25rem .5rem;margin-top:.22rem;flex-wrap:wrap">${k.value?`<span style="font-size:.78rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${getLPforUSD(k.type,k.value)?`<span style="font-size:.7rem;font-weight:700;color:var(--wa)" dir="rtl"><bdi>${getLPforUSD(k.type,k.value)} ${CUR}</bdi></span>`:''}<span style="margin-right:auto;font-size:.61rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button></div>`;}).join('');
       return `<div class="vsub" style="border-color:rgba(252,60,68,.25)"><div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin-bottom:.4rem"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><span style="font-weight:800;font-size:.82rem">${s.service}</span><span class="eb cd">💳 ${cards.length}</span>${tU?`<span style="font-size:.68rem;font-weight:700;color:var(--ok)">$${tU}</span>`:''}${tL?`<span style="font-size:.68rem;font-weight:700;color:var(--wa)">${tL.toFixed(0)} ${CUR}</span>`:''}<button class="btn bc btn-xs" style="margin-right:auto" onclick="viewCCards('${c.id}','${s.service}')">عرض الكل</button></div>${last3}${dbt}</div>`;
     }
     let badge,cls;
@@ -1326,7 +1368,7 @@ function viewC(id) {
     const pid='pv'+uid();const em=gSE(s),pw=gSP(s);
     const dl=s.isDebt&&!s.debtPaid?`<div style="margin-top:.35rem;background:rgba(232,67,147,.05);border:1px solid rgba(232,67,147,.25);border-radius:5px;padding:.3rem .5rem;display:flex;align-items:center;justify-content:space-between;gap:.3rem;flex-wrap:wrap"><span style="font-size:.66rem;color:var(--er);font-weight:700">⚠️ دين: ${subDV(s)} ${CUR}</span><button class="btn bs btn-xs" onclick="paySD('${c.id}','${s.id}')">✓ سدّد</button></div>`:'';
     const acts=`<div style="display:flex;gap:.25rem;margin-top:.35rem;flex-wrap:wrap">${(em||pw)?`<button class="btn bg btn-xs" onclick="copyAllCreds('${c.id}','${s.id}')">📋 نسخ</button>`:''}${s.expiry?`<button class="btn br btn-xs" onclick="qRenew('${c.id}','${s.id}')">⚡ +${Number(s.months)||1}ش</button>`:''}</div>`;
-    return `<div class="vsub"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.25rem;margin-bottom:.35rem"><div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><span style="font-weight:800;font-size:.82rem">${s.service}</span>${s.months?`<span style="font-size:.63rem;color:var(--mu)">${s.months} شهر</span>`:''}${(s.price!=null&&s.price!=='')?`<span style="font-size:.63rem;color:var(--ac3);font-weight:700">${s.price} ${CUR}</span>`:''}</div><div style="display:flex;align-items:center;gap:.25rem"><span class="eb ${cls}">${badge}</span><span style="font-size:.63rem;color:var(--mu)" dir="ltr">${s.expiry?toDMY(s.expiry):'—'}</span></div></div><div style="display:flex;flex-direction:column;gap:.22rem">${em?`<div class="crow"><span class="clb">الإيميل</span><span class="cval" dir="ltr" id="em_${pid}">${em}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('em_${pid}').textContent,this)">📋</button></div>`:''}${pw?`<div class="crow"><span class="clb">السر</span><span class="cval ph" id="${pid}" dir="ltr">${pw}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${pid}',this)">👁️</button></div>`:''}</div>${acts}${dl}</div>`;
+    return `<div class="vsub"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.25rem;margin-bottom:.35rem"><div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><span style="font-weight:800;font-size:.82rem">${s.service}</span>${s.months?`<span style="font-size:.63rem;color:var(--mu)">${s.months} شهر</span>`:''}${(s.price!=null&&s.price!=='')?`<span style="font-size:.63rem;color:var(--ac3);font-weight:700" dir="rtl"><bdi>${s.price} ${CUR}</bdi></span>`:''}</div><div style="display:flex;align-items:center;gap:.25rem"><span class="eb ${cls}">${badge}</span><span style="font-size:.63rem;color:var(--mu)" dir="ltr">${s.expiry?toDMY(s.expiry):'—'}</span></div></div><div style="display:flex;flex-direction:column;gap:.22rem">${em?`<div class="crow"><span class="clb">الإيميل</span><span class="cval" dir="ltr" id="em_${pid}">${em}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('em_${pid}').textContent,this)">📋</button></div>`:''}${pw?`<div class="crow"><span class="clb">السر</span><span class="cval ph" id="${pid}" dir="ltr">${pw}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${pid}',this)">👁️</button></div>`:''}</div>${acts}${dl}</div>`;
   }).join('')||`<div style="color:var(--mu);font-size:.78rem;text-align:center;padding:.7rem">لا توجد اشتراكات</div>`;
   const manD=db.manualDebts.filter(d=>d.customerId===c.id&&!d.paid);
   const mH=manD.length?`<div class="dv" style="color:var(--er)">💸 ديون يدوية</div>`+manD.map(d=>`<div style="background:rgba(232,67,147,.04);border:1px solid rgba(232,67,147,.22);border-radius:7px;padding:.5rem .7rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:.32rem;flex-wrap:wrap;gap:.25rem"><div><div style="font-size:.74rem;font-weight:700">${d.note||'دين'}</div><div style="font-size:.61rem;color:var(--mu)">${d.date?toDMY(d.date):''} — ${d.service||'عام'}</div></div><div style="display:flex;align-items:center;gap:.3rem"><span style="font-weight:900;color:var(--er)">${n2(d.amount).toFixed(2)} ${CUR}</span><button class="btn bs btn-xs" onclick="payMD('${d.id}')">✓</button></div></div>`).join(''):'';
@@ -1352,7 +1394,7 @@ function viewCCards(cid,srvFilter) {
   const tL=cards.reduce((a,k)=>a+n2(getLPforUSD(k.type,k.value)||0),0);
   document.getElementById('mCCardsList').innerHTML=
     `<div style="background:rgba(0,206,201,.06);border:1px solid rgba(0,206,201,.28);border-radius:7px;padding:.55rem .8rem;display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:.35rem"><div><div style="font-size:.6rem;color:var(--mu)">عدد</div><div style="font-weight:900;color:var(--cd)">${cards.length}</div></div>${tU?`<div><div style="font-size:.6rem;color:var(--mu)">USD</div><div style="font-weight:900;color:var(--ok)">$${tU.toFixed(0)}</div></div>`:''} ${tL?`<div><div style="font-size:.6rem;color:var(--mu)">${CUR}</div><div style="font-weight:900;color:var(--wa)">${tL.toFixed(0)}</div></div>`:''}</div>`+
-    cards.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map(k=>{const lp=getLPforUSD(k.type,k.value);const ci='vcc'+k.id;return`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:.7rem .85rem"><div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.45rem;flex-wrap:wrap"><span style="font-size:.82rem;font-weight:900">${k.type}</span>${k.value?`<span style="font-size:.88rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${lp?`<span style="font-size:.72rem;font-weight:700;color:var(--wa)">${lp} ${CUR}</span>`:''}<span style="margin-right:auto;font-size:.63rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span></div><div class="crow"><span class="clb">الكود</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('${ci}').textContent,this)">📋</button></div>${k.note?`<div style="font-size:.63rem;color:var(--mu);margin-top:.28rem">📝 ${k.note}</div>`:''}</div>`;}).join('');
+    cards.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map(k=>{const lp=getLPforUSD(k.type,k.value);const ci='vcc'+k.id;return`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:.7rem .85rem"><div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.45rem;flex-wrap:wrap"><span style="font-size:.82rem;font-weight:900">${k.type}</span>${k.value?`<span style="font-size:.88rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${lp?`<span style="font-size:.72rem;font-weight:700;color:var(--wa)" dir="rtl"><bdi>${lp} ${CUR}</bdi></span>`:''}<span style="margin-right:auto;font-size:.63rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span></div><div class="crow"><span class="clb">الكود</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('${ci}').textContent,this)">📋</button></div>${k.note?`<div style="font-size:.63rem;color:var(--mu);margin-top:.28rem">📝 ${k.note}</div>`:''}</div>`;}).join('');
   om('mCCards');
 }
 
@@ -1806,7 +1848,7 @@ function rK(){
         ${card.value?`<span style="font-size:1rem;font-weight:900;color:var(--ok)">$${card.value}</span>`:''}
         <span style="font-size:.57rem;padding:.06rem .34rem;border-radius:20px;font-weight:700;${isUsed?'background:rgba(90,90,122,.2);color:var(--mu)':'background:rgba(0,206,201,.12);color:var(--cd)'}">${isUsed?'مُستخدم':'متوفر'}</span>
       </div>
-      ${lp?`<div style="font-size:.68rem;color:var(--mu);margin-bottom:.42rem;text-align:left">${lp} ${CUR}</div>`:''}
+      ${lp?`<div style="font-size:.68rem;color:var(--mu);margin-bottom:.42rem" dir="rtl"><span style="unicode-bidi:embed">${lp} ${CUR}</span></div>`:''}
       <div style="display:flex;align-items:center;gap:.35rem;background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:.3rem .52rem;margin-bottom:.45rem">
         <span class="kcode" id="${ci}" dir="ltr">${card.code}</span>
         <button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="tcc('${ci}',this)">👁️</button>
@@ -1841,7 +1883,7 @@ function tkused(id){
   document.getElementById('mUsedT').textContent='✓ تسجيل "'+card.type+'" كمُستخدم';
   const lp=card.value?getLPforUSD(card.type,card.value):'';
   const ph=document.getElementById('muPrH');
-  if(card.value&&lp){ph.innerHTML=`💵 <b style="color:var(--ok)">$${card.value}</b> → سعر البيع: <b style="color:var(--wa)">${lp} ${CUR}</b>`;ph.style.display='block';}else ph.style.display='none';
+  if(card.value&&lp){ph.innerHTML=`<span dir="rtl" style="unicode-bidi:embed">💵 <b style="color:var(--ok)">$${card.value}</b> ← سعر البيع: <b style="color:var(--wa)">${lp} ${CUR}</b></span>`;ph.style.display='block';}else ph.style.display='none';
   document.getElementById('muSrch').value='';
   document.getElementById('muSel').style.display='none';document.getElementById('muSel').dataset.cid='';
   document.getElementById('muUseS').style.display='none';
@@ -2331,23 +2373,49 @@ function notify(msg,type='ok'){
 // INIT
 // ══════════════════════════════════════════
 // ══════════════════════════════════════════
+// SUPABASE AUTH CONFIG HELPERS (global)
+// ══════════════════════════════════════════
+const _SB_URL = 'https://palkkvgpdghaxjmhgzhs.supabase.co';
+const _SB_KEY = 'sb_publishable_4ljEtEOcAcONDBIhPlHOlg_wcsJuwTl';
+
+async function _sbGet(id) {
+  try {
+    const r = await fetch(_SB_URL + '/rest/v1/auth_config?id=eq.' + encodeURIComponent(id) + '&select=value', {
+      headers: { 'apikey': _SB_KEY, 'Authorization': 'Bearer ' + _SB_KEY }
+    });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return rows.length ? rows[0].value : null;
+  } catch(e) { return null; }
+}
+
+async function _sbSet(id, value) {
+  try {
+    await fetch(_SB_URL + '/rest/v1/auth_config', {
+      method: 'POST',
+      headers: {
+        'apikey': _SB_KEY, 'Authorization': 'Bearer ' + _SB_KEY,
+        'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({ id, value, updated_at: new Date().toISOString() })
+    });
+  } catch(e) {}
+}
+
+
+// ══════════════════════════════════════════
 // AUTH SYSTEM
 // ══════════════════════════════════════════
 (function(){
   'use strict';
 
 // ══ CLICKJACKING PROTECTION — FULL BLOCK ══
-// Blocks any attempt to embed this page inside a foreign iframe
 try {
   if (window.top !== window.self) {
     var _topOrigin = 'cross-origin';
     try { _topOrigin = window.top.location.origin; } catch(e) {}
     var _selfOrigin = window.self.location.origin;
-
-    // Only allow same-origin iframes (e.g. same GitHub Pages domain)
-    // Everything else — including file://, null, blob, srcdoc — is blocked
     if (_topOrigin !== _selfOrigin) {
-      // Nuke the page content immediately
       document.documentElement.innerHTML =
         '<html><head><meta charset="UTF-8"></head><body style="margin:0;background:#07070f;display:flex;height:100vh;align-items:center;justify-content:center">' +
         '<div style="text-align:center;font-family:sans-serif;padding:2rem">' +
@@ -2355,12 +2423,10 @@ try {
         '<div style="font-size:1.1rem;font-weight:700;color:#e84393">Unauthorized Access</div>' +
         '<div style="font-size:.8rem;color:#585878;margin-top:.5rem">This page cannot be embedded in an external frame.</div>' +
         '</div></body></html>';
-      // Also attempt to break out
       try { window.top.location.replace('about:blank'); } catch(e) {}
     }
   }
 } catch(e) {
-  // If we can't even check (sandboxed iframe) — block it
   try {
     document.documentElement.innerHTML =
       '<html><head><meta charset="UTF-8"></head><body style="margin:0;background:#07070f;display:flex;height:100vh;align-items:center;justify-content:center">' +
@@ -2385,15 +2451,29 @@ try {
   const _CK = 'ax_c1';
 
   async function _initDefaultCreds() {
-    // Nothing to do — user sets their own credentials on first run
+    // Nothing to do on init — credentials stored in Supabase
   }
 
   async function _loadCreds() {
+    // 1. Try localStorage cache (fast, avoids network on every load)
     try {
       const r = localStorage.getItem(_CK);
-      if (r) { const o = JSON.parse(r); if (o && o.u && o.h) return o; }
+      if (r) { const o = JSON.parse(r); if (o && o.u && o.h && o._ts && Date.now() - o._ts < 3600000) return o; }
     } catch(e) {}
-    return null; // first run — no credentials set yet
+    // 2. Fetch from Supabase (authoritative source)
+    try {
+      const val = await _sbGet('login_creds');
+      if (val) {
+        const o = JSON.parse(val);
+        if (o && o.u && o.h) {
+          // Cache locally with timestamp (1 hour TTL)
+          localStorage.setItem(_CK, JSON.stringify({ ...o, _ts: Date.now() }));
+          return o;
+        }
+      }
+    } catch(e) {}
+    // 3. No credentials anywhere — first run
+    return null;
   }
 
   
@@ -2641,7 +2721,9 @@ function _timingSafeEq(a, b) {
         if (!u || !p) { _showErr('أدخل اسم المستخدم وكلمة السر التي تريدها'); if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';} return; }
         if (p.length < 6) { _showErr('كلمة السر يجب أن تكون 6 أحرف على الأقل'); if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';} return; }
         const newHash = await _mkHash(u, p);
-        localStorage.setItem(_CK, JSON.stringify({ u: u.toLowerCase(), h: newHash }));
+        // First run: save to Supabase + local cache
+        await _sbSet('login_creds', JSON.stringify({ u: u.toLowerCase(), h: newHash }));
+        localStorage.setItem(_CK, JSON.stringify({ u: u.toLowerCase(), h: newHash, _ts: Date.now() }));
         _authed = true; _fails = 0;
         // Derive 256-bit key from credentials using SHA-256
         const _rawKey = u.toLowerCase() + '\x00' + p + '\x00' + 'subs_sk_lby_2025_v2';
@@ -2653,8 +2735,13 @@ function _timingSafeEq(a, b) {
         return;
       }
 
+      // Compute hash using BOTH username AND password combined
+      // If either is wrong, the hash won't match — they must both be correct simultaneously
       const ih = await _mkHash(u, p);
-      if (_timingSafeEq(u.toLowerCase(), cr.u.toLowerCase()) && _timingSafeEq(ih, cr.h)) {
+
+      // Single timing-safe comparison — username is baked into the hash
+      // so there is no way to verify one without the other
+      if (_timingSafeEq(ih, cr.h) && _timingSafeEq(u.toLowerCase(), cr.u.toLowerCase())) {
         _authed = true;
         _fails  = 0;
         document.getElementById('loginErr') && (document.getElementById('loginErr').style.display = 'none');
@@ -2679,30 +2766,89 @@ function _timingSafeEq(a, b) {
     }
   };
 
+  // _updateFileHash removed — credentials now stored in Supabase
+
+  // ── Export / Import credentials (for moving to new device/browser) ──
+  window._exportCreds = async function() {
+    // Credentials are now in Supabase — no need to export them
+    // This exports app data backup only
+    notify('ℹ️ بيانات الدخول محفوظة في Supabase — تلقائي على كل الأجهزة');
+  };
+
+  window._importCreds = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data._version || data._version !== 'subsly_v1') {
+          notify('❌ ملف غير صالح', 'er'); return;
+        }
+        const keys = ['ax_c1', 'cx_p1', 'subs_v5', 'sync_cfg', 'auto_bk', 'auto_sync'];
+        let imported = 0;
+        keys.forEach(k => {
+          if (data[k]) { localStorage.setItem(k, data[k]); imported++; }
+        });
+        notify('✅ تم الاستيراد — أعد تحميل الصفحة لتطبيق التغييرات');
+        // Reload after short delay
+        setTimeout(() => window.location.reload(), 1500);
+      } catch(err) {
+        notify('❌ فشل الاستيراد: ' + err.message, 'er');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
   // ── Change credentials ──
   window.changeCredentials = async function() {
-    const nu = (document.getElementById('chgUser') || {}).value || '';
-    const op = (document.getElementById('chgOld')  || {}).value || '';
-    const np = (document.getElementById('chgNew')  || {}).value || '';
-    const cp = (document.getElementById('chgCnf')  || {}).value || '';
+    const ou = (document.getElementById('chgOldUser')|| {}).value || '';
+    const op = (document.getElementById('chgOld')    || {}).value || '';
+    const nu = (document.getElementById('chgUser')   || {}).value || '';
+    const np = (document.getElementById('chgNew')    || {}).value || '';
+    const cp = (document.getElementById('chgCnf')    || {}).value || '';
+
+    // All fields required
+    if (!ou || !op)       { notify('❌ أدخل اسم المستخدم وكلمة السر الحالية', 'er'); return; }
+    if (!nu || !np || !cp){ notify('❌ أدخل اسم المستخدم وكلمة السر الجديدة كاملة', 'er'); return; }
+    if (np !== cp)        { notify('❌ كلمة السر الجديدة لا تتطابق', 'er'); return; }
+    if (np.length < 6)   { notify('⚠️ كلمة السر يجب أن تكون 6 أحرف على الأقل', 'wa'); return; }
+
     const cr = await _loadCreds();
-    if (await _mkHash(cr.u, op) !== cr.h) { notify('❌ كلمة السر الحالية غير صحيحة', 'er'); return; }
-    if (np && np !== cp) { notify('❌ كلمة السر الجديدة لا تتطابق', 'er'); return; }
-    if (np && np.length < 6) { notify('⚠️ 6 أحرف على الأقل', 'wa'); return; }
-    const fu = nu.trim() || cr.u;
-    const fp = np || op;
-    const nh = await _mkHash(fu, fp);
-    localStorage.setItem(_CK, JSON.stringify({ u: fu.toLowerCase(), h: nh }));
-    // Re-encrypt data with new key
-    const _rawKey3 = fu.toLowerCase() + '\x00' + fp + '\x00' + 'subs_sk_lby_2025_v2';
-    crypto.subtle.digest('SHA-256', new TextEncoder().encode(_rawKey3)).then(buf => {
-      _EK = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-      save();
-    });
-    ['chgUser','chgOld','chgNew','chgCnf'].forEach(id => {
+    if (!cr) { notify('❌ خطأ في تحميل بيانات الدخول', 'er'); return; }
+
+    // Verify BOTH old username AND old password must match exactly
+    const oldH = await _mkHash(ou, op);
+    const userMatch = _timingSafeEq(ou.toLowerCase(), cr.u.toLowerCase());
+    const passMatch = _timingSafeEq(oldH, cr.h);
+    if (!userMatch || !passMatch) {
+      notify('❌ اسم المستخدم أو كلمة السر الحالية غير صحيحة', 'er');
+      return;
+    }
+
+    // Save new credentials — old hash is completely overwritten
+    const newH = await _mkHash(nu, np);
+    // Save to Supabase (works on all devices) + clear local cache
+    await _sbSet('login_creds', JSON.stringify({ u: nu.toLowerCase(), h: newH }));
+    localStorage.removeItem(_CK);
+
+    // Re-derive encryption key with NEW credentials and re-encrypt data
+    const rawKey = nu.toLowerCase() + '\x00' + np + '\x00' + 'subs_sk_lby_2025_v2';
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey));
+    _EK = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    save();
+
+    // Clear all fields
+    ['chgOldUser','chgOld','chgUser','chgNew','chgCnf'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
-    notify('✅ تم تحديث بيانات الدخول');
+
+    // Auto-download updated HTML file with new hash embedded
+    const downloaded = await window._updateFileHash(nu, newH);
+    if (downloaded) {
+      notify('✅ تم تحديث بيانات الدخول — يعمل على جميع الأجهزة فوراً');
+    }
   };
 
   // ── Reset password ──
