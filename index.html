@@ -992,6 +992,7 @@ const gAcct = id => db.accounts.find(x=>x.id===id);
 const gSE   = s => { if(s&&s.accountId){const a=gAcct(s.accountId);if(a)return a.email||'';} return s&&s.account||''; };
 const gSP   = s => { if(s&&s.accountId){const a=gAcct(s.accountId);if(a)return a.password||'';} return s&&s.password||''; };
 const gP    = n => { if(!db.prices[n]||typeof db.prices[n]!=='object'||!db.prices[n].type) db.prices[n]={type:'months',tiers:[]}; return db.prices[n]; };
+const gCost = s => { const p=gP(s.service); if(!p||!p.tiers) return 0; const tier=p.tiers.find(t=>(t.label&&t.label===s.tierLabel)||(t.months&&String(t.months)===String(s.months))||(t.usd&&String(t.usd)===String(s.usdValue))); if(tier&&tier.costPrice!=null&&tier.costPrice!=='') return n2(tier.costPrice); const byP=p.tiers.find(t=>n2(t.price)===n2(s.price)&&t.costPrice!=null&&t.costPrice!==''); return byP?n2(byP.costPrice):0; };
 const mof   = s => (s&&PM[s.payMethod])?s.payMethod:'cash';
 const subOwes = s => !s.isCardGroup && !!s.isDebt && !s.debtPaid;
 const subDV   = s => { const v=Number((s.debtAmount!=null&&s.debtAmount!=='') ? s.debtAmount : s.price); return (isNaN(v)||v<0)?0:v; };
