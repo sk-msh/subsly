@@ -1119,15 +1119,65 @@ function _xorDec(b64, key) {
   } catch(e) { return null; }
 }
 
+// ── مؤشر حالة الحفظ السحابي ──
+let _syncTimer = null;
+let _syncPending = false;
+
+function _showSyncStatus(state) {
+  let el = document.getElementById('_syncIndicator');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_syncIndicator';
+    el.style.cssText = 'position:fixed;bottom:1rem;left:1rem;z-index:9999;font-family:Cairo,sans-serif;font-size:.7rem;font-weight:700;padding:.3rem .7rem;border-radius:20px;transition:opacity .4s;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  if (state === 'saving') {
+    el.textContent = '\u2601\uFE0F \u062C\u0627\u0631\u0650 \u0627\u0644\u062D\u0641\u0638...';
+    el.style.background = 'rgba(108,92,231,.18)';
+    el.style.color = '#a89cf7';
+    el.style.opacity = '1';
+  } else if (state === 'ok') {
+    el.textContent = '\u2705 \u0645\u062D\u0641\u0648\u0638 \u0639\u0644\u0649 \u0627\u0644\u0633\u064A\u0631\u0641\u0631';
+    el.style.background = 'rgba(0,184,148,.15)';
+    el.style.color = '#00b894';
+    el.style.opacity = '1';
+    setTimeout(() => { el.style.opacity = '0'; }, 2500);
+  } else {
+    el.textContent = '\u26A0\uFE0F \u0641\u0634\u0644 \u0627\u0644\u062D\u0641\u0638 \u0627\u0644\u0633\u062D\u0627\u0628\u064A';
+    el.style.background = 'rgba(232,67,147,.15)';
+    el.style.color = '#e84393';
+    el.style.opacity = '1';
+    setTimeout(() => { el.style.opacity = '0'; }, 4000);
+  }
+}
+
+async function _pushToCloud() {
+  if (!_AUTH_OK) return;
+  _syncPending = false;
+  _showSyncStatus('saving');
+  try {
+    const payload = JSON.stringify(db);
+    const ok = await _sbSet('main_db_v1', payload);
+    _showSyncStatus(ok ? 'ok' : 'err');
+  } catch(e) {
+    _showSyncStatus('err');
+  }
+}
+
 function save() {
   // Hard block: never write if not authenticated (prevents console attack)
   if (!_AUTH_OK) return;
   db.settings.currency = CUR;
+  // حفظ محلي فوري
   try {
     const plain = JSON.stringify(db);
     const data  = _EK ? _xorEnc(plain, _EK) : plain;
     localStorage.setItem('subs_v5', data);
-  } catch(e) { notify('⚠️ فضاء التخزين ممتلئ','er'); }
+  } catch(e) { notify('\u26A0\uFE0F \u0641\u0636\u0627\u0621 \u0627\u0644\u062A\u062E\u0632\u064A\u0646 \u0645\u0645\u062A\u0644\u0626','er'); }
+  // رفع سحابي فوري مع debounce 800ms
+  _syncPending = true;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(_pushToCloud, 800);
   uh(); triggerAutoSync();
 }
 
@@ -3493,7 +3543,7 @@ function _timingSafeEq(a, b) {
   }
 
   // ── Unlock app after successful login ──
-  function _unlockApp(encKey) {
+  async function _unlockApp(encKey) {
     _AUTH_OK = true; // enable save() and other guarded functions
     const gate = document.getElementById('auth-gate');
     if (gate) gate.remove();
@@ -3503,8 +3553,24 @@ function _timingSafeEq(a, b) {
     if (ov) { ov.style.transition = 'opacity .3s'; ov.style.opacity = '0';
       setTimeout(() => { ov.style.display = 'none'; }, 320); }
 
-    // 3. Load data with encryption key
-    let loaded = _loadDB(encKey);
+    // 3. Load data — السحابة أولاً دائماً (المصدر الرئيسي)، ثم localStorage كاحتياط
+    let loaded = null;
+    try {
+      const sbRaw = await _sbGet('main_db_v1');
+      if (sbRaw) {
+        const parsed = JSON.parse(sbRaw);
+        if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
+          loaded = parsed;
+          // حفظ في localStorage كـ cache
+          try {
+            const plain = JSON.stringify(loaded);
+            localStorage.setItem('subs_v5', encKey ? _xorEnc(plain, encKey) : plain);
+          } catch(e) {}
+        }
+      }
+    } catch(e) { console.warn('Supabase load failed, falling back to localStorage', e); }
+    // إذا فشلت السحابة — استخدم localStorage كاحتياط
+    if (!loaded) { loaded = _loadDB(encKey); }
 
     // 4. Bootstrap db (same logic as original)
     if (!loaded) {
