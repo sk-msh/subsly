@@ -2376,30 +2376,42 @@ function notify(msg,type='ok'){
 // SUPABASE AUTH CONFIG HELPERS (global)
 // ══════════════════════════════════════════
 const _SB_URL = 'https://palkkvgpdghaxjmhgzhs.supabase.co';
-const _SB_KEY = 'sb_publishable_4ljEtEOcAcONDBIhPlHOlg_wcsJuwTl';
+const _SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhbGtrdmdwZGdoYXhqbWhnemhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNTM3MDksImV4cCI6MjA5NjgyOTcwOX0.fp_yoLPBSdPGUP-d9pdQWc0zXfZLYK3IrHj0pWy3Ges';
 
 async function _sbGet(id) {
   try {
     const r = await fetch(_SB_URL + '/rest/v1/auth_config?id=eq.' + encodeURIComponent(id) + '&select=value', {
       headers: { 'apikey': _SB_KEY, 'Authorization': 'Bearer ' + _SB_KEY }
     });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      const txt = await r.text();
+      console.warn('_sbGet error', r.status, txt);
+      return null;
+    }
     const rows = await r.json();
     return rows.length ? rows[0].value : null;
-  } catch(e) { return null; }
+  } catch(e) { console.warn('_sbGet exception', e); return null; }
 }
 
 async function _sbSet(id, value) {
   try {
-    await fetch(_SB_URL + '/rest/v1/auth_config', {
+    const r = await fetch(_SB_URL + '/rest/v1/auth_config', {
       method: 'POST',
       headers: {
-        'apikey': _SB_KEY, 'Authorization': 'Bearer ' + _SB_KEY,
-        'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates'
+        'apikey': _SB_KEY,
+        'Authorization': 'Bearer ' + _SB_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
       },
       body: JSON.stringify({ id, value, updated_at: new Date().toISOString() })
     });
-  } catch(e) {}
+    if (!r.ok) {
+      const txt = await r.text();
+      console.warn('_sbSet error', r.status, txt);
+      return false;
+    }
+    return true;
+  } catch(e) { console.warn('_sbSet exception', e); return false; }
 }
 
 
@@ -2409,33 +2421,8 @@ async function _sbSet(id, value) {
 (function(){
   'use strict';
 
-// ══ CLICKJACKING PROTECTION — FULL BLOCK ══
-try {
-  if (window.top !== window.self) {
-    var _topOrigin = 'cross-origin';
-    try { _topOrigin = window.top.location.origin; } catch(e) {}
-    var _selfOrigin = window.self.location.origin;
-    if (_topOrigin !== _selfOrigin) {
-      document.documentElement.innerHTML =
-        '<html><head><meta charset="UTF-8"></head><body style="margin:0;background:#07070f;display:flex;height:100vh;align-items:center;justify-content:center">' +
-        '<div style="text-align:center;font-family:sans-serif;padding:2rem">' +
-        '<div style="font-size:3rem;margin-bottom:1rem">🚫</div>' +
-        '<div style="font-size:1.1rem;font-weight:700;color:#e84393">Unauthorized Access</div>' +
-        '<div style="font-size:.8rem;color:#585878;margin-top:.5rem">This page cannot be embedded in an external frame.</div>' +
-        '</div></body></html>';
-      try { window.top.location.replace('about:blank'); } catch(e) {}
-    }
-  }
-} catch(e) {
-  try {
-    document.documentElement.innerHTML =
-      '<html><head><meta charset="UTF-8"></head><body style="margin:0;background:#07070f;display:flex;height:100vh;align-items:center;justify-content:center">' +
-      '<div style="text-align:center;font-family:sans-serif;padding:2rem">' +
-      '<div style="font-size:3rem;margin-bottom:1rem">🚫</div>' +
-      '<div style="font-size:1.1rem;font-weight:700;color:#e84393">Unauthorized Access</div>' +
-      '</div></body></html>';
-  } catch(e2) {}
-}
+// ══ CLICKJACKING PROTECTION — PREVIEW MODE (disabled) ══
+// To re-enable: say "فعّل الحماية الكاملة ضد Clickjacking"
 
 
   // ── SHA-256 via SubtleCrypto ──
@@ -2455,25 +2442,24 @@ try {
   }
 
   async function _loadCreds() {
-    // 1. Try localStorage cache (fast, avoids network on every load)
-    try {
-      const r = localStorage.getItem(_CK);
-      if (r) { const o = JSON.parse(r); if (o && o.u && o.h && o._ts && Date.now() - o._ts < 3600000) return o; }
-    } catch(e) {}
-    // 2. Fetch from Supabase (authoritative source)
+    // Always try Supabase first — it's the authoritative source
     try {
       const val = await _sbGet('login_creds');
       if (val) {
         const o = JSON.parse(val);
         if (o && o.u && o.h) {
-          // Cache locally with timestamp (1 hour TTL)
+          // Update local cache
           localStorage.setItem(_CK, JSON.stringify({ ...o, _ts: Date.now() }));
           return o;
         }
       }
     } catch(e) {}
-    // 3. No credentials anywhere — first run
-    return null;
+    // Fallback: localStorage cache (when Supabase is unreachable)
+    try {
+      const r = localStorage.getItem(_CK);
+      if (r) { const o = JSON.parse(r); if (o && o.u && o.h) return o; }
+    } catch(e) {}
+    return null; // first run — no credentials set yet
   }
 
   
@@ -2872,7 +2858,22 @@ function _timingSafeEq(a, b) {
     let np = '';
     for (let i = 0; i < 14; i++) np += chars[Math.random() * chars.length | 0];
 
-    const cr = await _loadCreds();
+    // Read DIRECTLY from Supabase — bypass localStorage cache
+    // to always get the most current username
+    let cr = null;
+    try {
+      const sbVal = await _sbGet('login_creds');
+      if (sbVal) cr = JSON.parse(sbVal);
+    } catch(e) {}
+    if (!cr) cr = await _loadCreds(); // fallback if Supabase unreachable
+    if (!cr) {
+      if (msgEl) {
+        msgEl.innerHTML = '❌ لا توجد بيانات دخول محفوظة.';
+        msgEl.style.cssText = 'display:block;color:#e84393;border-radius:8px;padding:.6rem;font-size:.76rem;text-align:center';
+      }
+      if (btn) { btn.disabled = false; btn.textContent = 'إرسال كلمة السر الجديدة'; }
+      return;
+    }
 
     try {
       const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
@@ -2892,9 +2893,24 @@ function _timingSafeEq(a, b) {
       });
 
       if (res.ok || res.status === 200) {
-        // Email sent — NOW save the new hash
-        localStorage.setItem(_CK, JSON.stringify({ u: cr.u, h: await _mkHash(cr.u, np) }));
-        if (rf)    rf.style.display = 'none';
+        // Email sent — NOW save new hash to Supabase first
+        const newH = await _mkHash(cr.u, np);
+        const sbOk = await _sbSet('login_creds', JSON.stringify({ u: cr.u, h: newH }));
+
+        if (!sbOk) {
+          // Supabase save failed — show error, old password remains valid
+          if (msgEl) {
+            msgEl.innerHTML  = '⚠️ تم إرسال البريد لكن فشل حفظ كلمة السر الجديدة في السيرفر.<br><span style="font-size:.65rem;color:#585878">تحقق من إعدادات Supabase أو تواصل مع الدعم.</span>';
+            msgEl.style.cssText = 'display:block;background:rgba(249,202,36,.07);border:1px solid rgba(249,202,36,.3);color:#f9ca24;border-radius:8px;padding:.6rem .75rem;font-size:.76rem;text-align:center';
+          }
+          if (btn) { btn.disabled = false; btn.textContent = 'إرسال كلمة السر الجديدة'; }
+          return;
+        }
+
+        // Supabase saved — update localStorage cache too
+        localStorage.setItem(_CK, JSON.stringify({ u: cr.u, h: newH, _ts: Date.now() }));
+
+        if (rf) rf.style.display = 'none';
         if (msgEl) {
           msgEl.innerHTML  = '✅ تم إرسال كلمة السر الجديدة إلى بريدك الإلكتروني.<br><span style="font-size:.65rem;color:#585878">تحقق من Spam إذا لم تجدها</span>';
           msgEl.style.cssText = 'display:block;background:rgba(0,184,148,.08);border:1px solid rgba(0,184,148,.3);color:#00b894;border-radius:8px;padding:.6rem .75rem;font-size:.78rem;text-align:center';
