@@ -992,7 +992,6 @@ const gAcct = id => db.accounts.find(x=>x.id===id);
 const gSE   = s => { if(s&&s.accountId){const a=gAcct(s.accountId);if(a)return a.email||'';} return s&&s.account||''; };
 const gSP   = s => { if(s&&s.accountId){const a=gAcct(s.accountId);if(a)return a.password||'';} return s&&s.password||''; };
 const gP    = n => { if(!db.prices[n]||typeof db.prices[n]!=='object'||!db.prices[n].type) db.prices[n]={type:'months',tiers:[]}; return db.prices[n]; };
-const gCost = s => { const p=gP(s.service); if(!p||!p.tiers) return 0; const tier=p.tiers.find(t=>(t.label&&t.label===s.tierLabel)||(t.months&&String(t.months)===String(s.months))||(t.usd&&String(t.usd)===String(s.usdValue))); if(tier&&tier.costPrice!=null&&tier.costPrice!=='') return n2(tier.costPrice); const byP=p.tiers.find(t=>n2(t.price)===n2(s.price)&&t.costPrice!=null&&t.costPrice!==''); return byP?n2(byP.costPrice):0; };
 const mof   = s => (s&&PM[s.payMethod])?s.payMethod:'cash';
 const subOwes = s => !s.isCardGroup && !!s.isDebt && !s.debtPaid;
 const subDV   = s => { const v=Number((s.debtAmount!=null&&s.debtAmount!=='') ? s.debtAmount : s.price); return (isNaN(v)||v<0)?0:v; };
@@ -1119,65 +1118,13 @@ function _xorDec(b64, key) {
   } catch(e) { return null; }
 }
 
-// ── مؤشر حالة الحفظ السحابي ──
-let _syncTimer = null;
-let _syncPending = false;
-
-function _showSyncStatus(state) {
-  let el = document.getElementById('_syncIndicator');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = '_syncIndicator';
-    el.style.cssText = 'position:fixed;bottom:1rem;left:1rem;z-index:9999;font-family:Cairo,sans-serif;font-size:.7rem;font-weight:700;padding:.3rem .7rem;border-radius:20px;transition:opacity .4s;pointer-events:none;';
-    document.body.appendChild(el);
-  }
-  if (state === 'saving') {
-    el.textContent = '\u2601\uFE0F \u062C\u0627\u0631\u0650 \u0627\u0644\u062D\u0641\u0638...';
-    el.style.background = 'rgba(108,92,231,.18)';
-    el.style.color = '#a89cf7';
-    el.style.opacity = '1';
-  } else if (state === 'ok') {
-    el.textContent = '\u2705 \u0645\u062D\u0641\u0648\u0638 \u0639\u0644\u0649 \u0627\u0644\u0633\u064A\u0631\u0641\u0631';
-    el.style.background = 'rgba(0,184,148,.15)';
-    el.style.color = '#00b894';
-    el.style.opacity = '1';
-    setTimeout(() => { el.style.opacity = '0'; }, 2500);
-  } else {
-    el.textContent = '\u26A0\uFE0F \u0641\u0634\u0644 \u0627\u0644\u062D\u0641\u0638 \u0627\u0644\u0633\u062D\u0627\u0628\u064A';
-    el.style.background = 'rgba(232,67,147,.15)';
-    el.style.color = '#e84393';
-    el.style.opacity = '1';
-    setTimeout(() => { el.style.opacity = '0'; }, 4000);
-  }
-}
-
-async function _pushToCloud() {
-  if (!_AUTH_OK) return;
-  _syncPending = false;
-  _showSyncStatus('saving');
-  try {
-    const payload = JSON.stringify(db);
-    const ok = await _sbSet('main_db_v1', payload);
-    _showSyncStatus(ok ? 'ok' : 'err');
-  } catch(e) {
-    _showSyncStatus('err');
-  }
-}
-
 function save() {
   // Hard block: never write if not authenticated (prevents console attack)
   if (!_AUTH_OK) return;
   db.settings.currency = CUR;
-  // حفظ محلي فوري
   try {
-    const plain = JSON.stringify(db);
-    const data  = _EK ? _xorEnc(plain, _EK) : plain;
-    localStorage.setItem('subs_v5', data);
-  } catch(e) { notify('\u26A0\uFE0F \u0641\u0636\u0627\u0621 \u0627\u0644\u062A\u062E\u0632\u064A\u0646 \u0645\u0645\u062A\u0644\u0626','er'); }
-  // رفع سحابي فوري مع debounce 800ms
-  _syncPending = true;
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(_pushToCloud, 800);
+    localStorage.setItem('subs_v5', JSON.stringify(db));
+  } catch(e) { notify('⚠️ فضاء التخزين ممتلئ','er'); }
   uh(); triggerAutoSync();
 }
 
@@ -2478,7 +2425,15 @@ function autoFL(sn,i,uv){const rate=n2(db.settings.usdRate);if(!rate)return;cons
 function getAlerts(){
   const r=[];
   db.customers.forEach(c=>(c.subscriptions||[]).forEach(s=>{if(!s.isCardGroup&&s.expiry){const d=du(s.expiry);if(d<=7)r.push({type:'sub',cust:c,sub:s,days:d});}}));
-  db.accounts.forEach(a=>{if(!a.nextPaymentDate)return;const d=du(a.nextPaymentDate);if(d<=5)r.push({type:'acct',acct:a,days:d});});
+  db.accounts.forEach(a=>{
+    if(!a.nextPaymentDate) return;
+    const d=du(a.nextPaymentDate);
+    if(d>5) return;
+    // Hide confirmed renewals — they disappear from the list
+    const confirmed = a.renewConfirmed && a.renewConfirmedDate===a.nextPaymentDate;
+    if(confirmed) return;
+    r.push({type:'acct',acct:a,days:d});
+  });
   return r.sort((a,b)=>{
     if(alertSort==='desc'){
       // الأكثر أياماً أولاً (المنتهية في الأخير)
@@ -2519,7 +2474,31 @@ function rAlerts(){
       const lbl=a.days<0?`متأخر ${Math.abs(a.days)}ي`:a.days===0?'اليوم':`بعد ${a.days}ي`;
       const cls=a.days<=0?'ur':a.days<=3?'so':'';
       const conf=acc.renewConfirmed&&acc.renewConfirmedDate===acc.nextPaymentDate;
-      return`<div class="ai ${cls}"><div style="font-size:1.05rem">${icon}</div><div style="flex:1"><div style="font-weight:700;font-size:.8rem;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">🗂️ ${acc.service}<span style="font-size:.57rem;background:rgba(0,206,201,.1);color:var(--cd);padding:.03rem .34rem;border-radius:20px;font-weight:700">تجديد حساب</span>${conf?'<span style="font-size:.57rem;background:rgba(0,184,148,.12);color:var(--ok);padding:.03rem .34rem;border-radius:20px;font-weight:700">✅ مؤكد</span>':''}</div><div style="font-size:.65rem;color:var(--mu);display:flex;gap:.3rem;flex-wrap:wrap;margin-top:2px"><span dir="ltr">${acc.email}</span><span dir="ltr">📅 ${toDMY(acc.nextPaymentDate)}</span></div></div><div style="text-align:left"><div class="ai-d ${cls}" style="font-size:.7rem">${lbl}</div><div style="display:flex;gap:.25rem;margin-top:.25rem;flex-wrap:wrap">${!conf?`<button class="btn bs btn-xs" onclick="confAcct('${acc.id}')">✅ تأكيد</button>`:`<button class="btn bg btn-xs" onclick="unconfAcct('${acc.id}')">↩️ إلغاء</button>`}<button class="btn bg btn-xs" onclick="sw('accts');setTimeout(()=>selAT('${esc(acc.service)}'),80)">عرض</button></div></div></div>`;
+      return`<div class="ai ${cls}">
+        <div style="font-size:1.05rem">${icon}</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:.8rem;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">
+            🗂️ ${san(acc.service)}
+            <span style="font-size:.57rem;background:rgba(0,206,201,.1);color:var(--cd);padding:.03rem .34rem;border-radius:20px;font-weight:700">تجديد حساب</span>
+            ${conf?'<span style="font-size:.57rem;background:rgba(0,184,148,.12);color:var(--ok);padding:.03rem .34rem;border-radius:20px;font-weight:700">✅ مؤكد</span>':''}
+          </div>
+          <div style="font-size:.65rem;color:var(--mu);display:flex;gap:.3rem;flex-wrap:wrap;margin-top:2px">
+            <span dir="ltr">${san(acc.email)}</span>
+            <span dir="ltr">📅 ${toDMY(acc.nextPaymentDate)}</span>
+          </div>
+          <div id="acctDetail_${acc.id}" style="display:none"></div>
+        </div>
+        <div style="text-align:left;flex-shrink:0">
+          <div class="ai-d ${cls}" style="font-size:.7rem">${lbl}</div>
+          <div style="display:flex;gap:.25rem;margin-top:.25rem;flex-wrap:wrap;justify-content:flex-end">
+            ${!conf
+              ?`<button class="btn bs btn-xs" onclick="confAcct('${acc.id}')">✅ تأكيد</button>`
+              :`<button class="btn bg btn-xs" onclick="unconfAcct('${acc.id}')">↩️ إلغاء</button>`}
+            <button class="btn bg btn-xs" onclick="toggleAcctDetail('${acc.id}')">🔍 عرض</button>
+            <button class="btn bc btn-xs" onclick="openAcctM('${acc.id}')">✏️</button>
+          </div>
+        </div>
+      </div>`;
     }
     const urg=a.days<=th;const srv=db.services.find(x=>x.name===a.sub.service)||{color:'#7c6aff'};
     const icon=a.days<0?'🔴':a.days===0?'🟠':urg?'🟡':'🟢';
@@ -2532,6 +2511,82 @@ function rAlerts(){
 }
 function confAcct(id){const i=db.accounts.findIndex(a=>a.id===id);if(i<0)return;db.accounts[i].renewConfirmed=true;db.accounts[i].renewConfirmedDate=db.accounts[i].nextPaymentDate;save();rAlerts();rA();notify('✅ تم تأكيد التجديد');}
 function unconfAcct(id){const i=db.accounts.findIndex(a=>a.id===id);if(i<0)return;db.accounts[i].renewConfirmed=false;save();rAlerts();rA();notify('↩️ تم الإلغاء');}
+
+function toggleAcctDetail(id) {
+  const el = document.getElementById('acctDetail_'+id);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  const acc = db.accounts.find(a=>a.id===id);
+  if (!acc) return;
+  const srv = db.services.find(x=>x.name===acc.service)||{color:'#7c6aff'};
+  // Count how many subscriptions use this account
+  const subs = db.customers.flatMap(c=>(c.subscriptions||[]).filter(s=>s.accountId===id||s.account===acc.email));
+  const usedSlots = subs.length;
+  const totalSlots = acc.slots||'—';
+  // Build detail card
+  el.innerHTML = `<div style="margin-top:.55rem;background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:.7rem .8rem;position:relative">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${srv.color};border-radius:10px 10px 0 0"></div>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.45rem">
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:.58rem;color:var(--mu);margin-bottom:.1rem">الخدمة</div>
+        <div style="font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:.3rem">
+          <span style="width:8px;height:8px;border-radius:50%;background:${srv.color};display:inline-block"></span>
+          ${san(acc.service)}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:.58rem;color:var(--mu);margin-bottom:.1rem">المقاعد</div>
+        <div style="font-size:.78rem;font-weight:800;color:${usedSlots>=totalSlots?'var(--er)':'var(--ok)'}">
+          ${usedSlots} / ${totalSlots}
+        </div>
+      </div>
+      ${acc.renewCost!=null&&acc.renewCost!==''?`<div>
+        <div style="font-size:.58rem;color:var(--mu);margin-bottom:.1rem">تكلفة الاشتراك</div>
+        <div style="font-size:.78rem;font-weight:800;color:var(--er)" dir="rtl">${n2(acc.renewCost).toFixed(2)} ${CUR}</div>
+      </div>`:''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.45rem">
+      <div style="background:var(--s2);border-radius:7px;padding:.4rem .55rem">
+        <div style="font-size:.57rem;color:var(--mu);margin-bottom:.15rem">📧 الإيميل</div>
+        <div style="font-size:.7rem;font-weight:700;direction:ltr;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${san(acc.email)}</div>
+        <button class="btn bg btn-xs" style="margin-top:.25rem;width:100%" onclick="cpt('${esc(acc.email)}',this)">📋 نسخ</button>
+      </div>
+      <div style="background:var(--s2);border-radius:7px;padding:.4rem .55rem">
+        <div style="font-size:.57rem;color:var(--mu);margin-bottom:.15rem">🔑 كلمة السر</div>
+        <div style="font-size:.7rem;font-weight:700;direction:ltr;text-align:left" id="apwd_${id}">••••••••</div>
+        <div style="display:flex;gap:.2rem;margin-top:.25rem">
+          <button class="btn bg btn-xs" style="flex:1" onclick="var e=document.getElementById('apwd_${id}');e.textContent=e.textContent==='••••••••'?'${esc(acc.password||'')}':'••••••••'">👁️</button>
+          <button class="btn bg btn-xs" style="flex:1" onclick="cpt('${esc(acc.password||'')}',this)">📋</button>
+        </div>
+      </div>
+    </div>
+    ${acc.nextPaymentDate?`<div style="display:flex;align-items:center;gap:.4rem;background:rgba(253,203,110,.07);border:1px solid rgba(253,203,110,.25);border-radius:7px;padding:.4rem .6rem;margin-bottom:.4rem">
+      <span style="font-size:.85rem">📅</span>
+      <div style="flex:1;font-size:.68rem">
+        <span style="color:var(--mu)">موعد التجديد: </span>
+        <b style="color:var(--wa)">${toDMY(acc.nextPaymentDate)}</b>
+      </div>
+      <span style="font-size:.65rem;font-weight:700;color:${du(acc.nextPaymentDate)<=0?'var(--er)':'var(--wa)'}">
+        ${du(acc.nextPaymentDate)<0?'متأخر '+Math.abs(du(acc.nextPaymentDate))+'ي':du(acc.nextPaymentDate)===0?'اليوم':'بعد '+du(acc.nextPaymentDate)+'ي'}
+      </span>
+    </div>`:''}
+    ${acc.note?`<div style="font-size:.65rem;color:var(--mu);background:var(--s2);border-radius:6px;padding:.3rem .5rem">📝 ${san(acc.note)}</div>`:''}
+    ${subs.length?`<div style="margin-top:.4rem">
+      <div style="font-size:.6rem;color:var(--mu);margin-bottom:.25rem">المستخدمون الحاليون (${subs.length}):</div>
+      ${subs.map(s=>{
+        const cust=db.customers.find(c=>(c.subscriptions||[]).some(x=>x.id===s.id));
+        if(!cust) return '';
+        const d=du(s.expiry);
+        return `<div style="display:flex;align-items:center;gap:.35rem;background:var(--s2);border-radius:6px;padding:.3rem .5rem;margin-bottom:.2rem">
+          <div style="flex:1;font-size:.68rem;font-weight:700">${san(cust.name)}</div>
+          ${s.profileSlot?`<div style="font-size:.6rem;color:var(--cd)">🎭 ${san(s.profileSlot)}</div>`:''}
+          <div style="font-size:.6rem;color:${d<0?'var(--er)':d<=3?'var(--wa)':'var(--mu)'}" dir="ltr">${s.expiry?toDMY(s.expiry):'—'}</div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+  </div>`;
+  el.style.display = 'block';
+}
 
 // ══════════════════════════════════════════
 // FINANCE
@@ -2712,281 +2767,349 @@ function rFinance(){
     return`<div style="display:flex;align-items:center;gap:.5rem;background:var(--s2);border-radius:7px;padding:.4rem .65rem;flex-wrap:wrap;margin-bottom:.25rem"><div style="width:5px;height:5px;border-radius:50%;background:${srv.color}"></div><div style="flex:1;font-size:.74rem;min-width:80px"><b>${s.cN}</b> — ${s.service}</div>${(s.price!=null&&s.price!=='')?`<span style="font-size:.65rem;color:var(--ac3)" dir="rtl">${s.price} ${CUR}</span>`:''}<span class="eb ${d<0?'er':d<=3?'wa':'ok'}">${d<0?'منتهي '+Math.abs(d)+'ي':'باقٍ '+d+'ي'}</span><span style="font-size:.62rem;color:var(--mu)" dir="ltr">${toDMY(s.expiry)}</span></div>`;
   }).join(''):'<div style="color:var(--mu);font-size:.74rem;text-align:center;padding:.45rem">لا توجد</div>';
 
-  // ══ SVG CHART BUILDERS ══
+  // ══ FINANCE CSS (inject once) ══
+  if (!document.getElementById('_finCSS')) {
+    const css = document.createElement('style');
+    css.id = '_finCSS';
+    css.textContent = `
+      .fin-section { margin-bottom: 1.2rem; }
+      .fin-title { font-size:.63rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-bottom:.35rem;border-bottom:1px solid var(--b1);margin-bottom:.7rem;display:flex;align-items:center;gap:.35rem; }
+      .fin-grid-2 { display:grid;grid-template-columns:1fr 1fr;gap:.65rem; }
+      .fin-grid-3 { display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem; }
+      .fin-card { background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:.8rem .9rem;position:relative;overflow:hidden; }
+      .fin-card-accent { border-left:3px solid; }
+      .fin-label { font-size:.6rem;color:var(--mu);margin-bottom:.22rem;font-weight:600; }
+      .fin-value { font-size:1.28rem;font-weight:900;line-height:1.1; }
+      .fin-sub { font-size:.6rem;color:var(--mu);margin-top:.22rem; }
+      .fin-chart-wrap { background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:.85rem; }
+      .fin-legend-row { display:flex;align-items:center;gap:.38rem;margin-bottom:.28rem; }
+      .fin-legend-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+      .fin-legend-label { flex:1;font-size:.63rem;color:var(--mu); }
+      .fin-legend-pct { font-size:.65rem;font-weight:700; }
+      .fin-legend-val { font-size:.58rem;color:var(--mu);min-width:40px;text-align:left; }
+      .fin-bar-row { margin-bottom:.42rem; }
+      .fin-bar-header { display:flex;align-items:center;gap:.35rem;margin-bottom:.18rem; }
+      .fin-bar-bg { width:100%;height:6px;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden; }
+      .fin-bar-fill { height:100%;border-radius:6px;transition:width .5s ease; }
+      .fin-month-label { font-size:.55rem;color:var(--mu);text-align:center;margin-top:.3rem; }
+      .fin-month-val { font-size:.52rem;font-weight:700;text-align:center; }
+      .fin-divider { border:none;border-top:1px solid var(--b1);margin:1.1rem 0; }
+      .fin-gauge-wrap { display:flex;flex-direction:column;align-items:center; }
+    `;
+    document.head.appendChild(css);
+  }
 
-  // Donut chart — takes array of {label, value, color}
-  function svgDonut(slices, cx=80, cy=80, r=60, thick=22) {
-    const total = slices.reduce((a,s)=>a+s.value,0);
-    if(!total) return '<svg width="160" height="160"><text x="80" y="85" text-anchor="middle" fill="var(--mu)" font-size="11">لا بيانات</text></svg>';
+  // ── Section helper ──
+  const S = (icon, title, content) =>
+    `<div class="fin-section">
+      <div class="fin-title">${icon ? `<span>${icon}</span>` : ''}${title}</div>
+      ${content}
+    </div>`;
+
+  // ── KPI card helper ──
+  const K = (label, val, sub, color, accent) =>
+    `<div class="fin-card fin-card-accent" style="border-left-color:${color}">
+      <div class="fin-label">${label}</div>
+      <div class="fin-value" style="color:${color}">${val}</div>
+      ${sub ? `<div class="fin-sub">${sub}</div>` : ''}
+    </div>`;
+
+  // ── Bar helper ──
+  const Bar = (val, max, color, h=6) => {
+    const pct = max > 0 ? Math.min(100, Math.max(0, (val/max)*100)) : 0;
+    return `<div class="fin-bar-bg"><div class="fin-bar-fill" style="width:${pct.toFixed(1)}%;background:${color};height:${h}px"></div></div>`;
+  };
+
+  // ── Legend row helper ──
+  const Leg = (color, label, pct, val) =>
+    `<div class="fin-legend-row">
+      <div class="fin-legend-dot" style="background:${color}"></div>
+      <div class="fin-legend-label">${label}</div>
+      <div class="fin-legend-pct" style="color:${color}">${pct.toFixed(1)}%</div>
+      ${val !== undefined ? `<div class="fin-legend-val" dir="rtl">${val}</div>` : ''}
+    </div>`;
+
+  // ── Donut with center text ──
+  function Donut(slices, size=130, label='') {
+    const total = slices.reduce((a,s)=>a+s.value, 0);
+    const cx=size/2, cy=size/2, r=size*.38, thick=size*.14;
+    if (!total) return `<svg width="${size}" height="${size}"><text x="${cx}" y="${cy+5}" text-anchor="middle" fill="var(--mu)" font-size="10">لا بيانات</text></svg>`;
     let angle = -Math.PI/2;
-    const paths = slices.map(s=>{
-      const pct = s.value/total;
-      const sweep = pct * 2 * Math.PI;
+    const paths = slices.map(s => {
+      const sweep = (s.value/total)*2*Math.PI;
       const x1=cx+r*Math.cos(angle), y1=cy+r*Math.sin(angle);
-      angle+=sweep;
+      angle += sweep;
       const x2=cx+r*Math.cos(angle), y2=cy+r*Math.sin(angle);
-      const large=sweep>Math.PI?1:0;
       const ri=r-thick;
       const xi1=cx+ri*Math.cos(angle-sweep), yi1=cy+ri*Math.sin(angle-sweep);
       const xi2=cx+ri*Math.cos(angle), yi2=cy+ri*Math.sin(angle);
-      return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${xi2.toFixed(1)},${yi2.toFixed(1)} A${ri},${ri} 0 ${large},0 ${xi1.toFixed(1)},${yi1.toFixed(1)} Z" fill="${s.color}" opacity=".92"/>`;
+      const lg=sweep>Math.PI?1:0;
+      return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${xi2.toFixed(1)},${yi2.toFixed(1)} A${ri},${ri} 0 ${lg},0 ${xi1.toFixed(1)},${yi1.toFixed(1)} Z" fill="${s.color}" opacity=".93"/>`;
     }).join('');
-    return `<svg viewBox="0 0 160 160" width="100%" style="max-width:160px">${paths}</svg>`;
+    const topSlice = slices.reduce((a,b)=>b.value>a.value?b:a);
+    const topPct = (topSlice.value/total*100).toFixed(0);
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+      ${paths}
+      <text x="${cx}" y="${cy-3}" text-anchor="middle" fill="${topSlice.color}" font-size="${size*.12}" font-weight="900">${topPct}%</text>
+      <text x="${cx}" y="${cy+11}" text-anchor="middle" fill="rgba(255,255,255,.4)" font-size="${size*.07}">${topSlice.label}</text>
+    </svg>`;
   }
 
-  // Horizontal bar with % fill
-  function pctBar2(val, max, color, h=7) {
-    const pct = max>0?Math.min(100,Math.max(0,(val/max)*100)):0;
-    return `<div style="width:100%;height:${h}px;background:rgba(255,255,255,.06);border-radius:${h}px;overflow:hidden"><div style="width:${pct.toFixed(1)}%;height:100%;background:${color};border-radius:${h}px;transition:width .5s"></div></div>`;
-  }
-
-  // Gauge arc 0-100
-  function svgGauge(pct, color, label, size=120) {
-    const r=46, cx=60, cy=65;
-    const toRad=a=>((a-90)*Math.PI/180);
-    const arc=(a1,a2)=>{
-      const x1=cx+r*Math.cos(toRad(a1)), y1=cy+r*Math.sin(toRad(a1));
-      const x2=cx+r*Math.cos(toRad(a2)), y2=cy+r*Math.sin(toRad(a2));
-      const lg=(a2-a1)>180?1:0;
-      return `M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)}`;
+  // ── Gauge ──
+  function Gauge(pct, color) {
+    const r=42, cx=55, cy=55;
+    const toXY = (deg) => {
+      const rad = (deg-90)*Math.PI/180;
+      return [cx+r*Math.cos(rad), cy+r*Math.sin(rad)];
     };
-    const endA = -150 + Math.min(100,Math.max(0,pct))*3;
-    return `<svg viewBox="0 0 120 80" width="${size}" height="${size*0.67}">
-      <path d="${arc(-150,150)}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10" stroke-linecap="round"/>
-      <path d="${arc(-150,endA)}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round"/>
-      <text x="60" y="58" text-anchor="middle" fill="${color}" font-size="16" font-weight="900">${pct.toFixed(0)}%</text>
-      <text x="60" y="72" text-anchor="middle" fill="rgba(255,255,255,.4)" font-size="8">${label}</text>
+    const [bx1,by1]=toXY(-140); const [bx2,by2]=toXY(140);
+    const [fx1,fy1]=toXY(-140); const endDeg=-140+Math.min(100,Math.max(0,pct))*2.8;
+    const [fx2,fy2]=toXY(endDeg);
+    const lg=pct>50?1:0;
+    return `<svg viewBox="0 0 110 75" width="110" height="75">
+      <path d="M${bx1.toFixed(1)},${by1.toFixed(1)} A${r},${r} 0 1,1 ${bx2.toFixed(1)},${by2.toFixed(1)}" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="8" stroke-linecap="round"/>
+      <path d="M${fx1.toFixed(1)},${fy1.toFixed(1)} A${r},${r} 0 ${lg},1 ${fx2.toFixed(1)},${fy2.toFixed(1)}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round"/>
+      <text x="55" y="52" text-anchor="middle" fill="${color}" font-size="15" font-weight="900">${pct.toFixed(0)}%</text>
     </svg>`;
   }
 
-  // Sparkline from array of values
-  function svgSparkline(vals, color='var(--ok)', w=200, h=50) {
-    if(!vals.length) return '';
-    const max=Math.max(...vals,1), min=0;
-    const pts=vals.map((v,i)=>{
-      const x=(i/(vals.length-1||1))*w;
-      const y=h-((v-min)/(max-min||1))*(h-4)-2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    const area=`${vals.map((v,i)=>{const x=(i/(vals.length-1||1))*w;const y=h-((v-min)/(max-min||1))*(h-4)-2;return `${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ')} ${w},${h} 0,${h}`;
+  // ── Sparkline ──
+  function Spark(vals, color, w=300, h=52) {
+    if (!vals.length || Math.max(...vals) === 0) return `<div style="height:${h}px;display:flex;align-items:center;justify-content:center;color:var(--mu);font-size:.68rem">لا بيانات</div>`;
+    const max=Math.max(...vals), min=0;
+    const x=i=>(i/(vals.length-1||1))*w;
+    const y=v=>h-((v-min)/(max-min||1))*(h-6)-3;
+    const pts=vals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const area=[...vals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`),`${w},${h}`,`0,${h}`].join(' ');
+    const id='sp'+Math.random().toString(36).slice(2,7);
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none">
-      <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".3"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
-      <polygon points="${area}" fill="url(#sg)"/>
-      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".25"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+      <polygon points="${area}" fill="url(#${id})"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${vals.map((v,i)=>v===max?`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${color}"/>`:'').join('')}
     </svg>`;
   }
 
-  // ══ CHART DATA ══
+  // ══ DATA ══
+  const revTotal   = Object.values(bySrv).reduce((a,d)=>a+d.rev,0);
+  const costTotal  = costBreakSlices.reduce((a,s)=>a+s.value,0);
+  const pmTotal    = pmSlices.reduce((a,s)=>a+s.value,0);
 
-  // 1. Revenue breakdown donut
-  const revenueSlices = Object.entries(bySrv).map(([n,d])=>{
-    const srv=db.services.find(x=>x.name===n)||{color:'var(--ach)'};
-    return {label:n, value:d.rev, color:srv.color||'#7c6aff'};
-  }).filter(s=>s.value>0).sort((a,b)=>b.value-a.value).slice(0,8);
+  const revSlices  = Object.entries(bySrv).map(([n,d])=>{const srv=db.services.find(x=>x.name===n)||{color:'#7c6aff'};return{label:n,value:d.rev,color:srv.color||'#7c6aff'};}).filter(s=>s.value>0).sort((a,b)=>b.value-a.value).slice(0,7);
+  const statSlices = [{label:'نشط',value:act,color:'#00b894'},{label:'منتهي',value:exp,color:'#e84393'}].filter(s=>s.value>0);
 
-  // 2. Status donut
-  const statusSlices=[
-    {label:'نشط',   value:act, color:'#00b894'},
-    {label:'منتهي', value:exp, color:'#e84393'},
-  ].filter(s=>s.value>0);
+  // ══ RENDER ══
+  document.getElementById('fc').innerHTML = `
 
-  // 3. Cost breakdown donut
-  const costBreakSlices=[
-    {label:'تكلفة الاشتراكات', value: allS.reduce((a,s)=>a+gCost(s),0), color:'#e17055'},
-    {label:'تكاليف الحسابات',  value: acctMonthlyCost, color:'#fdcb6e'},
-    {label:'مصاريف إدارية',    value: expMonthlyCost,  color:'#d63031'},
-  ].filter(s=>s.value>0);
+    ${S('📊','مؤشرات الأداء الرئيسية',`
+      <div class="fin-grid-3" style="margin-bottom:.55rem">
+        ${K('💰 إجمالي الإيرادات', revenue.toFixed(2)+' '+CUR, total+' اشتراك', '#00b894', '#00b894')}
+        ${K('🏭 تكلفة المبيعات', cogs>0?cogs.toFixed(2)+' '+CUR:'غير محدد', 'اشتراكات + حسابات + مصاريف', '#e17055', '#e17055')}
+        ${K('📈 إجمالي الربح', grossP.toFixed(2)+' '+CUR, 'هامش: '+(cogs>0?grossPct.toFixed(1):'—')+'%', grossP>=0?'#00b894':'#e84393', grossP>=0?'#00b894':'#e84393')}
+      </div>
+      <div class="fin-grid-3">
+        ${K('⚠️ الديون', debt.toFixed(2)+' '+CUR, db.customers.filter(c=>custOwes(c)>0).length+' عميل', '#e84393', '#e84393')}
+        ${K('🏆 صافي الربح', netP.toFixed(2)+' '+CUR, 'بعد الديون والمصاريف', netP>=0?'#6c5ce7':'#e84393', netP>=0?'#6c5ce7':'#e84393')}
+        ${K('📅 تنتهي الشهر', expThisM.length+' اشتراك', expRev.toFixed(2)+' '+CUR+' متوقع', '#fdcb6e', '#fdcb6e')}
+      </div>
+    `)}
 
-  // 4. Payment method donut
-  const pmSlices=Object.entries(byPM).map(([m,v])=>{
-    const mC={cash:'#00b894',balance:'#7c6aff',transfer:'#00cec9'};
-    const lb=PM[m]?PM[m].l:m;
-    return {label:lb, value:v, color:mC[m]||'#a29bfe'};
-  }).filter(s=>s.value>0);
+    <hr class="fin-divider">
 
-  // 5. Sparkline for monthly trend
-  const sparkRevVals=months6.map(m=>m.rev);
-  const sparkCostVals=months6.map(m=>m.cost);
-
-  // ══ DONUT LEGENDS ══
-  const donutLegend=(slices,total)=>slices.map(s=>{
-    const pct=total>0?((s.value/total)*100).toFixed(1):'0';
-    return `<div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.22rem">
-      <div style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></div>
-      <div style="flex:1;font-size:.62rem;color:var(--mu)">${s.label}</div>
-      <div style="font-size:.65rem;font-weight:700">${pct}%</div>
-    </div>`;
-  }).join('');
-
-  const revTotal=revenueSlices.reduce((a,s)=>a+s.value,0);
-  const costTotal=costBreakSlices.reduce((a,s)=>a+s.value,0);
-  const pmTotal=pmSlices.reduce((a,s)=>a+s.value,0);
-
-  // ══ GAUGE VALUES ══
-  const grossMarginGauge = svgGauge(Math.max(0,grossPct), '#00b894', 'هامش الربح');
-  const activeRateGauge  = svgGauge(total>0?(act/total*100):0, '#7c6aff', 'معدل النشاط');
-  const debtRateGauge    = svgGauge(revenue>0?(debt/revenue*100):0, '#e84393', 'نسبة الديون');
-
-  document.getElementById('fc').innerHTML=`
-    ${sect('📊 مؤشرات الأداء الرئيسية (KPIs)',kpi1+kpi2)}
-
-    ${sect('🎯 مقاييس الأداء',`
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;text-align:center">
-        <div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:.7rem .5rem">
-          ${grossMarginGauge}
-          <div style="font-size:.65rem;color:var(--mu);margin-top:.2rem">إجمالي الربح / الإيراد</div>
+    ${S('🎯','مقاييس الأداء',`
+      <div class="fin-grid-3">
+        <div class="fin-chart-wrap fin-gauge-wrap">
+          ${Gauge(Math.max(0,grossPct),'#00b894')}
+          <div style="font-size:.6rem;color:var(--mu);margin-top:.15rem;font-weight:600">هامش الربح</div>
         </div>
-        <div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:.7rem .5rem">
-          ${activeRateGauge}
-          <div style="font-size:.65rem;color:var(--mu);margin-top:.2rem">الاشتراكات النشطة</div>
+        <div class="fin-chart-wrap fin-gauge-wrap">
+          ${Gauge(total>0?(act/total*100):0,'#7c6aff')}
+          <div style="font-size:.6rem;color:var(--mu);margin-top:.15rem;font-weight:600">معدل النشاط</div>
         </div>
-        <div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:.7rem .5rem">
-          ${debtRateGauge}
-          <div style="font-size:.65rem;color:var(--mu);margin-top:.2rem">الديون من الإيراد</div>
+        <div class="fin-chart-wrap fin-gauge-wrap">
+          ${Gauge(Math.min(100,revenue>0?(debt/revenue*100):0),'#e84393')}
+          <div style="font-size:.6rem;color:var(--mu);margin-top:.15rem;font-weight:600">نسبة الديون</div>
         </div>
       </div>
     `)}
 
-    ${sect('🍩 توزيع الإيرادات',`
-      ${revenueSlices.length?`
-      <div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;justify-content:center;min-width:140px">
-          ${svgDonut(revenueSlices)}
-        </div>
-        <div style="flex:1;min-width:120px">
-          <div style="font-size:.6rem;color:var(--mu);margin-bottom:.4rem">الإجمالي: <b style="color:var(--ok)">${revTotal.toFixed(0)} ${CUR}</b></div>
-          ${donutLegend(revenueSlices,revTotal)}
-        </div>
-      </div>`:'<div style="color:var(--mu);font-size:.74rem">لا بيانات</div>'}
-    `)}
+    <hr class="fin-divider">
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:1.1rem">
-      ${sect('📊 حالة الاشتراكات',`
-        <div style="display:flex;gap:.7rem;align-items:center">
-          <div style="min-width:120px;display:flex;justify-content:center">${svgDonut(statusSlices,60,60,44,16)}</div>
-          <div style="flex:1">
-            ${donutLegend(statusSlices,total)}
-            <div style="margin-top:.4rem;font-size:.6rem;color:var(--mu)">الإجمالي: <b>${total}</b> اشتراك</div>
+    ${S('📈','الاتجاه الشهري — آخر 6 أشهر',`
+      <div class="fin-chart-wrap">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;flex-wrap:wrap;gap:.3rem">
+          <div style="display:flex;gap:.9rem;font-size:.6rem;color:var(--mu)">
+            <span style="display:flex;align-items:center;gap:.3rem"><span style="width:14px;height:2px;background:#00b894;border-radius:2px;display:inline-block"></span>إيرادات</span>
+            <span style="display:flex;align-items:center;gap:.3rem"><span style="width:14px;height:2px;background:#e84393;border-radius:2px;display:inline-block"></span>تكاليف</span>
           </div>
+          <div style="font-size:.62rem;color:var(--mu)">أعلى شهر: <b style="color:#00b894">${Math.max(...months6.map(m=>m.rev),0).toFixed(0)} ${CUR}</b></div>
         </div>
-      `)}
-      ${sect('💳 طرق الدفع',`
-        <div style="display:flex;gap:.7rem;align-items:center">
-          <div style="min-width:120px;display:flex;justify-content:center">${svgDonut(pmSlices,60,60,44,16)}</div>
-          <div style="flex:1">${donutLegend(pmSlices,pmTotal)}</div>
+        <div style="position:relative;height:60px;margin-bottom:.4rem">
+          <div style="position:absolute;inset:0">${Spark(months6.map(m=>m.rev),'#00b894',400,60)}</div>
+          <div style="position:absolute;inset:0;opacity:.7">${Spark(months6.map(m=>m.cost),'#e84393',400,60)}</div>
         </div>
-      `)}
-    </div>
-
-    ${costBreakSlices.length?sect('💸 توزيع التكاليف',`
-      <div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">
-        <div style="min-width:140px;display:flex;justify-content:center">${svgDonut(costBreakSlices)}</div>
-        <div style="flex:1;min-width:120px">
-          <div style="font-size:.6rem;color:var(--mu);margin-bottom:.4rem">إجمالي التكاليف: <b style="color:var(--er)">${cogs.toFixed(0)} ${CUR}</b></div>
-          ${donutLegend(costBreakSlices,costTotal)}
-        </div>
-      </div>
-    `):''}
-
-    ${sect('📈 الاتجاه الشهري — آخر 6 أشهر',`
-      <div style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:.7rem;overflow:hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;flex-wrap:wrap;gap:.3rem">
-          <div style="display:flex;gap:.8rem;font-size:.6rem;color:var(--mu)">
-            <span><span style="display:inline-block;width:10px;height:3px;background:var(--ok);border-radius:2px;margin-left:.3rem;vertical-align:middle"></span>إيرادات</span>
-            <span><span style="display:inline-block;width:10px;height:3px;background:var(--er);border-radius:2px;margin-left:.3rem;vertical-align:middle"></span>تكاليف</span>
-          </div>
-          <div style="font-size:.62rem;color:var(--mu)">أعلى: <b style="color:var(--ok)">${Math.max(...sparkRevVals).toFixed(0)} ${CUR}</b></div>
-        </div>
-        <div style="position:relative;height:55px">
-          <div style="position:absolute;inset:0;opacity:.6">${svgSparkline(sparkRevVals,'#00b894',400,55)}</div>
-          <div style="position:absolute;inset:0;opacity:.5">${svgSparkline(sparkCostVals,'#e84393',400,55)}</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:.35rem">
-          ${months6.map(m=>`<div style="text-align:center;flex:1">
-            <div style="font-size:.55rem;color:var(--mu)">${m.label}</div>
-            ${m.rev>0?`<div style="font-size:.52rem;color:var(--ok);font-weight:700">${m.rev.toFixed(0)}</div>`:''}
+        <div style="display:flex">
+          ${months6.map(m=>`<div style="flex:1;text-align:center">
+            <div class="fin-month-label">${m.label}</div>
+            ${m.rev>0?`<div class="fin-month-val" style="color:#00b894">${m.rev.toFixed(0)}</div>`:'<div class="fin-month-val" style="color:var(--mu)">—</div>'}
           </div>`).join('')}
         </div>
       </div>
-      ${sect('','').replace('</div>','')}
-      <div style="display:flex;gap:.3rem;align-items:flex-end;margin-top:.5rem">
-        ${trendBars}
-      </div>
     `)}
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:1.1rem">
-      ${sect('📈 ربحية الخدمات',`
-        ${Object.entries(bySrv).sort((a,b)=>b[1].rev-a[1].rev).map(([n,d])=>{
-          const srv=db.services.find(x=>x.name===n)||{color:'var(--ach)'};
-          const gp=d.rev-d.cost;
-          const gpPct=d.rev>0?(gp/d.rev*100):0;
-          const hasCost=d.cost>0;
-          return `<div style="margin-bottom:.5rem">
-            <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.18rem;flex-wrap:wrap">
-              <div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div>
-              <div style="flex:1;font-size:.72rem;font-weight:700">${n}</div>
-              <div style="font-size:.65rem;color:var(--ok)" dir="rtl">${d.rev.toFixed(0)}</div>
-              ${hasCost?`<div style="font-size:.62rem;color:${gp>=0?'var(--ok)':'var(--er)'}">=${gp>=0?'+':''}${gp.toFixed(0)}</div>`:''}
+    <hr class="fin-divider">
+
+    <div class="fin-grid-2">
+
+      ${S('🍩','توزيع الإيرادات',`
+        <div class="fin-chart-wrap">
+          ${revSlices.length ? `
+          <div style="display:flex;gap:.75rem;align-items:center">
+            <div style="flex-shrink:0">${Donut(revSlices,120)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.58rem;color:var(--mu);margin-bottom:.35rem">إجمالي: <b style="color:#00b894">${revTotal.toFixed(0)} ${CUR}</b></div>
+              ${revSlices.map(s=>Leg(s.color,s.label,s.value/revTotal*100,s.value.toFixed(0))).join('')}
             </div>
-            ${pctBar2(d.rev, revTotal||1, srv.color||'var(--ach)', 6)}
-            ${hasCost?`<div style="display:flex;gap:2px;margin-top:2px">${pctBar2(d.cost, d.rev, 'rgba(232,67,147,.5)', 3)}</div>`:''}
-          </div>`;
-        }).join('')||'<div style="color:var(--mu);font-size:.74rem">لا بيانات</div>'}
+          </div>` : '<div style="color:var(--mu);font-size:.72rem;text-align:center;padding:.5rem">لا بيانات</div>'}
+        </div>
       `)}
-      ${sect('🏆 أفضل العملاء',`
-        ${topCuHtml}
-        ${topCu.length?`<div style="margin-top:.5rem">${pctBar2(topCu[0]?.[1]?.rev||0, revTotal||1,'var(--ac2)',4)}</div>`:''}
+
+      ${S('📊','حالة الاشتراكات',`
+        <div class="fin-chart-wrap">
+          <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:.7rem">
+            <div style="flex-shrink:0">${Donut(statSlices,100)}</div>
+            <div style="flex:1">
+              ${statSlices.map(s=>Leg(s.color,s.label,total>0?s.value/total*100:0,s.value+'')).join('')}
+              <div style="font-size:.6rem;color:var(--mu);margin-top:.35rem">الإجمالي: <b>${total}</b></div>
+            </div>
+          </div>
+          <div>
+            ${Bar(act,total,'#00b894',8)}
+            <div style="display:flex;justify-content:space-between;font-size:.58rem;color:var(--mu);margin-top:.2rem"><span>نشط: ${act}</span><span>منتهي: ${exp}</span></div>
+          </div>
+        </div>
       `)}
+
     </div>
 
-    ${sect('📣 مصادر الزبائن',`
+    <div class="fin-grid-2" style="margin-top:.65rem">
+
+      ${S('📈','ربحية الخدمات',`
+        <div class="fin-chart-wrap">
+          ${Object.entries(bySrv).sort((a,b)=>b[1].rev-a[1].rev).map(([n,d])=>{
+            const srv=db.services.find(x=>x.name===n)||{color:'#7c6aff'};
+            const gp=d.rev-d.cost; const hasCost=d.cost>0;
+            return `<div class="fin-bar-row">
+              <div class="fin-bar-header">
+                <div style="width:7px;height:7px;border-radius:50%;background:${srv.color};flex-shrink:0"></div>
+                <div style="flex:1;font-size:.7rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</div>
+                <div style="font-size:.65rem;font-weight:700;color:#00b894" dir="rtl">${d.rev.toFixed(0)}</div>
+                ${hasCost?`<div style="font-size:.6rem;color:${gp>=0?'#00b894':'#e84393'}">${gp>=0?'+':''}${gp.toFixed(0)}</div>`:''}
+              </div>
+              ${Bar(d.rev,revTotal||1,srv.color||'#7c6aff',5)}
+              ${hasCost?`<div style="margin-top:2px">${Bar(d.cost,d.rev,'rgba(232,67,147,.45)',3)}</div>`:''}
+            </div>`;
+          }).join('')||'<div style="color:var(--mu);font-size:.72rem">لا بيانات</div>'}
+        </div>
+      `)}
+
+      ${S('🏆','أفضل الزبائن',`
+        <div class="fin-chart-wrap">
+          ${topCu.length ? topCu.map(([n,d],i)=>`
+            <div class="fin-bar-row">
+              <div class="fin-bar-header">
+                <div style="font-size:.68rem;font-weight:900;color:var(--mu);width:16px">${i+1}</div>
+                <div style="flex:1;font-size:.7rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</div>
+                <div style="font-size:.65rem;font-weight:700;color:var(--ac2)" dir="rtl">${d.rev.toFixed(0)}</div>
+                ${d.debt>0?`<div style="font-size:.58rem;color:#e84393">-${d.debt.toFixed(0)}</div>`:''}
+              </div>
+              ${Bar(d.rev,revTotal||1,'var(--ac2)',5)}
+            </div>`).join('')
+          : '<div style="color:var(--mu);font-size:.72rem">لا بيانات</div>'}
+        </div>
+      `)}
+
+    </div>
+
+    <div class="fin-grid-2" style="margin-top:.65rem">
+
+      ${S('💳','طرق الدفع',`
+        <div class="fin-chart-wrap">
+          <div style="display:flex;gap:.7rem;align-items:center">
+            <div style="flex-shrink:0">${Donut(pmSlices,100)}</div>
+            <div style="flex:1">
+              ${pmSlices.map(s=>Leg(s.color,s.label,pmTotal>0?s.value/pmTotal*100:0,s.value.toFixed(0))).join('')}
+            </div>
+          </div>
+        </div>
+      `)}
+
+      ${costBreakSlices.length ? S('💸','توزيع التكاليف',`
+        <div class="fin-chart-wrap">
+          <div style="display:flex;gap:.7rem;align-items:center;margin-bottom:.5rem">
+            <div style="flex-shrink:0">${Donut(costBreakSlices,100)}</div>
+            <div style="flex:1">
+              <div style="font-size:.58rem;color:var(--mu);margin-bottom:.3rem">الإجمالي: <b style="color:#e84393">${cogs.toFixed(0)} ${CUR}</b></div>
+              ${costBreakSlices.map(s=>Leg(s.color,s.label,costTotal>0?s.value/costTotal*100:0,s.value.toFixed(0))).join('')}
+            </div>
+          </div>
+        </div>
+      `) : ''}
+
+    </div>
+
+    ${S('📣','مصادر الزبائن',`
       ${(()=>{
         const bySrc={};
         db.customers.forEach(c=>{const s=c.source||'direct';if(!bySrc[s])bySrc[s]=0;bySrc[s]++;});
-        const total2=db.customers.length;
-        if(!total2) return '<div style="color:var(--mu);font-size:.74rem">لا بيانات</div>';
-        const srcSlices=Object.entries(bySrc).map(([s,n])=>({
-          label:s==='whatsapp'?'واتساب':s==='referral'?'إحالة':s==='ad'?'إعلان':s==='social'?'سوشيال':s==='direct'?'مباشر':'أخرى',
-          value:n, color:{whatsapp:'#25d366',referral:'#7c6aff',ad:'#fdcb6e',social:'#00cec9',direct:'#74b9ff',other:'#a29bfe'}[s]||'#a29bfe'
-        }));
-        return `<div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">
-          <div style="min-width:140px;display:flex;justify-content:center">${svgDonut(srcSlices)}</div>
-          <div style="flex:1;min-width:120px">
-            ${srcSlices.sort((a,b)=>b.value-a.value).map(s=>`
-              <div style="margin-bottom:.35rem">
-                <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.18rem">
-                  <div style="width:7px;height:7px;border-radius:50%;background:${s.color}"></div>
-                  <div style="flex:1;font-size:.68rem;font-weight:700">${s.label}</div>
-                  <div style="font-size:.65rem;font-weight:900;color:${s.color}">${s.value}</div>
-                  <div style="font-size:.6rem;color:var(--mu)">${(s.value/total2*100).toFixed(0)}%</div>
-                </div>
-                ${pctBar2(s.value,total2,s.color,5)}
-              </div>`).join('')}
+        const tot=db.customers.length;
+        if(!tot) return '<div class="fin-chart-wrap" style="color:var(--mu);font-size:.72rem;text-align:center;padding:.5rem">لا بيانات</div>';
+        const srcColors={whatsapp:'#25d366',referral:'#7c6aff',ad:'#fdcb6e',social:'#00cec9',direct:'#74b9ff',other:'#a29bfe'};
+        const srcNames={whatsapp:'واتساب',referral:'إحالة زبون',ad:'إعلان',social:'سوشيال ميديا',direct:'مباشر',other:'أخرى'};
+        const slices=Object.entries(bySrc).map(([s,n])=>({label:srcNames[s]||s,value:n,color:srcColors[s]||'#a29bfe'})).sort((a,b)=>b.value-a.value);
+        return `<div class="fin-chart-wrap">
+          <div style="display:flex;gap:.85rem;align-items:center;flex-wrap:wrap">
+            <div style="flex-shrink:0">${Donut(slices,120)}</div>
+            <div style="flex:1;min-width:120px">
+              ${slices.map(s=>`
+                <div style="margin-bottom:.4rem">
+                  ${Leg(s.color,s.label,s.value/tot*100,s.value+' زبون')}
+                  ${Bar(s.value,tot,s.color,4)}
+                </div>`).join('')}
+            </div>
           </div>
         </div>`;
       })()}
     `)}
 
-    ${acctCosts.length?sect('💸 تكاليف اشتراكات الحسابات',`
-      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:.65rem .8rem;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-        <span style="font-size:.7rem;color:var(--mu)">إجمالي تكلفة الاشتراكات:</span>
-        <span style="font-size:1.1rem;font-weight:900;color:var(--er)" dir="rtl">${acctMonthlyCost.toFixed(2)} ${CUR}</span>
-        <span style="font-size:.62rem;color:var(--mu)">من ${acctCosts.length} حساب</span>
+    ${acctCosts.length ? S('💸','تكاليف اشتراكات الحسابات',`
+      <div class="fin-chart-wrap">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem;padding-bottom:.55rem;border-bottom:1px solid var(--b1)">
+          <div style="font-size:.7rem;color:var(--mu)">إجمالي شهري:</div>
+          <div style="font-size:1rem;font-weight:900;color:#e84393" dir="rtl">${acctMonthlyCost.toFixed(2)} ${CUR}</div>
+          <div style="font-size:.6rem;color:var(--mu);margin-right:auto">من ${acctCosts.length} حساب</div>
+        </div>
+        ${acctCosts.sort((a,b)=>b.monthly-a.monthly).map(a=>{
+          const srv=db.services.find(x=>x.name===a.service)||{color:'#7c6aff'};
+          const cycle=a.renewCycle&&a.renewCycle>1?' / '+a.renewCycle+'ش':'';
+          return `<div class="fin-bar-row">
+            <div class="fin-bar-header">
+              <div style="width:7px;height:7px;border-radius:50%;background:${srv.color};flex-shrink:0"></div>
+              <div style="flex:1;font-size:.7rem;font-weight:700">${a.service}</div>
+              <div style="font-size:.6rem;color:var(--mu)" dir="ltr">${a.email.split('@')[0]}</div>
+              <div style="font-size:.68rem;font-weight:700;color:#e84393" dir="rtl">${n2(a.renewCost).toFixed(2)}${cycle}</div>
+            </div>
+            ${Bar(a.monthly,acctMonthlyCost||1,srv.color||'#e84393',5)}
+          </div>`;
+        }).join('')}
       </div>
-      ${acctCosts.sort((a,b)=>b.monthly-a.monthly).map(a=>{
-        const srv=db.services.find(x=>x.name===a.service)||{color:'var(--ach)'};
-        const cycle=a.renewCycle&&a.renewCycle>1?' / كل '+a.renewCycle+' أشهر':'';
-        return '<div style="margin-bottom:.5rem">'
-          +'<div style="display:flex;align-items:center;gap:.45rem;margin-bottom:.2rem;flex-wrap:wrap">'
-          +'<div style="width:7px;height:7px;border-radius:50%;background:'+srv.color+'"></div>'
-          +'<div style="flex:1;font-size:.75rem;font-weight:700">'+a.service+'</div>'
-          +'<div style="font-size:.7rem;font-weight:700;color:var(--er)" dir="rtl">'+n2(a.renewCost).toFixed(2)+' '+CUR+cycle+'</div>'
-          +'</div>'
-          +pctBar2(a.monthly,acctMonthlyCost||1,srv.color||'var(--er)',5)
-          +'</div>';
-      }).join('')}
-    `):''}
-    ${sect('📅 تنتهي هذا الشهر',expListHtml)}
+    `) : ''}
+
+    ${S('📅','تنتهي هذا الشهر',`
+      <div class="fin-chart-wrap">
+        ${expListHtml}
+      </div>
+    `)}
   `;
 }
 
@@ -3517,33 +3640,31 @@ function _timingSafeEq(a, b) {
 
   // ── Load & decrypt DB using XOR key derived from password ──
   function _loadDB(encKey) {
-    _EK = encKey; // set global encryption key
+    _EK = encKey;
     const raw = localStorage.getItem('subs_v5');
     if (!raw) return null;
 
-    // 1. Try plain JSON first (existing unencrypted data — most common on first run)
+    // Try plain JSON (current format)
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
-        // Valid plain data found — will be re-saved encrypted after login
+      if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services))
         return parsed;
-      }
     } catch(e) {}
 
-    // 2. Try XOR decryption (data was already encrypted by this app)
-    const dec = _xorDec(raw, encKey);
-    if (dec) {
-      try {
+    // Try XOR decryption (legacy encrypted data from older versions)
+    try {
+      const dec = _xorDec(raw, encKey);
+      if (dec) {
         const parsed = JSON.parse(dec);
         if (parsed && typeof parsed === 'object') return parsed;
-      } catch(e) {}
-    }
+      }
+    } catch(e) {}
 
     return null;
   }
 
   // ── Unlock app after successful login ──
-  async function _unlockApp(encKey) {
+  function _unlockApp(encKey) {
     _AUTH_OK = true; // enable save() and other guarded functions
     const gate = document.getElementById('auth-gate');
     if (gate) gate.remove();
@@ -3553,24 +3674,8 @@ function _timingSafeEq(a, b) {
     if (ov) { ov.style.transition = 'opacity .3s'; ov.style.opacity = '0';
       setTimeout(() => { ov.style.display = 'none'; }, 320); }
 
-    // 3. Load data — السحابة أولاً دائماً (المصدر الرئيسي)، ثم localStorage كاحتياط
-    let loaded = null;
-    try {
-      const sbRaw = await _sbGet('main_db_v1');
-      if (sbRaw) {
-        const parsed = JSON.parse(sbRaw);
-        if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
-          loaded = parsed;
-          // حفظ في localStorage كـ cache
-          try {
-            const plain = JSON.stringify(loaded);
-            localStorage.setItem('subs_v5', encKey ? _xorEnc(plain, encKey) : plain);
-          } catch(e) {}
-        }
-      }
-    } catch(e) { console.warn('Supabase load failed, falling back to localStorage', e); }
-    // إذا فشلت السحابة — استخدم localStorage كاحتياط
-    if (!loaded) { loaded = _loadDB(encKey); }
+    // 3. Load data with encryption key
+    let loaded = _loadDB(encKey);
 
     // 4. Bootstrap db (same logic as original)
     if (!loaded) {
