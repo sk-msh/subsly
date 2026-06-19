@@ -4104,8 +4104,28 @@ function _timingSafeEq(a, b) {
     if (ov) { ov.style.transition = 'opacity .3s'; ov.style.opacity = '0';
       setTimeout(() => { ov.style.display = 'none'; }, 320); }
 
-    // 3. Load data — localStorage فوراً (سريع)، Supabase في الخلفية بدون تجميد الواجهة
-    const loaded = _loadDB(encKey);
+    // 3. Load data — localStorage فوراً (سريع) إن وُجدت
+    let loaded = _loadDB(encKey);
+
+    // ── إن لم توجد بيانات محلية (جهاز/متصفح جديد، أو localStorage فُرِّغ) ──
+    // نحاول الجلب من Supabase فوراً قبل إنشاء قاعدة بيانات فارغة — هذا يمنع فقدان البيانات القديمة
+    let _sbFetchFailed = false;
+    if (!loaded) {
+      try {
+        const sbRaw = await _sbGet('main_db_v1');
+        if (sbRaw) {
+          const parsed = JSON.parse(sbRaw);
+          if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
+            loaded = parsed;
+          }
+        } else {
+          _sbFetchFailed = true; // الطلب نجح لكن لا توجد بيانات على الإطلاق — قد يكون مستخدماً جديداً فعلاً
+        }
+      } catch(e) {
+        console.warn('Initial Supabase fetch failed', e);
+        _sbFetchFailed = true; // فشل الطلب نفسه (شبكة/CSP) — لا نعرف إن كانت هناك بيانات أم لا
+      }
+    }
 
     // 4. Bootstrap db (same logic as original)
     if (!loaded) {
@@ -4135,11 +4155,31 @@ function _timingSafeEq(a, b) {
     CUR = String(db.settings.currency || 'د.ل');
 
     // 5. Re-save (migrates plain data, ensures consistency)
-    save();
+    // حماية حرجة: لا نرفع بيانات فارغة لـ Supabase إذا فشل الاتصال
+    // (قد يكون السبب انقطاع شبكة مؤقت — رفع db فارغة سيمحو البيانات الحقيقية المخزنة)
+    if (!_sbFetchFailed) {
+      save();
+    } else {
+      // فشل الاتصال بـ Supabase ولا توجد بيانات محلية — لا نحفظ فوق أي شيء، فقط محلياً
+      try { localStorage.setItem('subs_v5', JSON.stringify(db)); } catch(e) {}
+      console.warn('تخطي الرفع السحابي: فشل الاتصال بـ Supabase — لمنع فقدان البيانات المحتملة');
+    }
 
     // 6. Run app — تظهر البيانات فوراً من localStorage
     rQSB(); rUBan(); rC(); uh();
     if (localStorage.getItem('auto_bk') === '1') startAutoBk();
+
+    // تحذير واضح للمستخدم إذا فشل الاتصال بـ Supabase ولا توجد بيانات محلية
+    if (_sbFetchFailed && (!db.customers || !db.customers.length) && (!db.cards || !db.cards.length)) {
+      setTimeout(() => {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99998;background:linear-gradient(135deg,#e84393,#d63031);color:#fff;font-family:Cairo,sans-serif;font-size:.8rem;font-weight:700;display:flex;align-items:center;justify-content:center;gap:.6rem;padding:.6rem 1rem;box-shadow:0 2px 12px rgba(0,0,0,.4)';
+        banner.innerHTML = '⚠️ تعذّر الاتصال بالسيرفر — البيانات الظاهرة قد لا تكون كاملة. تحقق من الإنترنت وأعد التحميل.' +
+          '<button onclick="location.reload()" style="background:rgba(255,255,255,.25);border:none;color:#fff;padding:.2rem .7rem;border-radius:16px;font-weight:800;cursor:pointer;font-family:Cairo,sans-serif;font-size:.72rem">إعادة تحميل</button>' +
+          '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,.8);cursor:pointer;font-size:1rem">✕</button>';
+        document.body.appendChild(banner);
+      }, 500);
+    }
 
     // ── مزامنة Supabase دورية — تعمل بصمت في الخلفية بدون تجميد الواجهة ──
     async function _bgSync() {
