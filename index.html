@@ -473,21 +473,7 @@ mark{background:rgba(108,92,231,.3);color:var(--ach);border-radius:3px;padding:0
     </div>
     <div id="dw" style="display:none;background:rgba(249,202,36,.06);border:1px solid rgba(249,202,36,.3);border-radius:7px;padding:.45rem .65rem;font-size:.72rem;margin-bottom:.6rem"></div>
     <div class="fg2">
-      <div class="fg2">
       <div class="fr"><label class="fl">ملاحظات</label><input class="fi" id="fNt"></div>
-      <div class="fr"><label class="fl">📣 مصدر الزبون</label>
-        <select class="fs" id="fSrc" onchange="var r=document.getElementById('fRefRow');if(r)r.style.display=this.value==='referral'?'':'none'">
-          <option value="">— اختياري —</option>
-          <option value="whatsapp">💬 واتساب</option>
-          <option value="referral">👥 إحالة زبون</option>
-          <option value="ad">📢 إعلان</option>
-          <option value="social">📱 سوشيال ميديا</option>
-          <option value="direct">🚶 مباشر</option>
-          <option value="other">أخرى</option>
-        </select>
-      </div>
-    </div>
-    <div id="fRefRow" class="fr" style="display:none"><label class="fl">👥 أحاله</label><input class="fi" id="fRef" placeholder="اسم الزبون الذي أحاله"></div>
       <div class="fr"><label class="fl">📣 مصدر الزبون</label>
         <select class="fs" id="fSrc">
           <option value="">— اختياري —</option>
@@ -1182,9 +1168,11 @@ function save() {
   // Hard block: never write if not authenticated (prevents console attack)
   if (!_AUTH_OK) return;
   db.settings.currency = CUR;
-  // حفظ محلي فوري — plain JSON (no XOR — was causing data loss across file edits)
+  // حفظ محلي فوري
   try {
-    localStorage.setItem('subs_v5', JSON.stringify(db));
+    const plain = JSON.stringify(db);
+    const data  = _EK ? _xorEnc(plain, _EK) : plain;
+    localStorage.setItem('subs_v5', data);
   } catch(e) { notify('\u26A0\uFE0F \u0641\u0636\u0627\u0621 \u0627\u0644\u062A\u062E\u0632\u064A\u0646 \u0645\u0645\u062A\u0644\u0626','er'); }
   // رفع سحابي فوري مع debounce 800ms
   _syncPending = true;
@@ -1803,7 +1791,7 @@ function openAdd(){
   document.getElementById('mCustT').textContent='➕ زبون جديد';
   ['fN','fP','fNt','fLL','fAdr','fAP','fRef'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const fs=document.getElementById('fSrc');if(fs)fs.value='';
-  const fr=document.getElementById('fRefRow');if(fr)fr.style.display='none';
+  const fr=document.getElementById('fRefRow');if(fr)fr.style.display='none';;
   document.getElementById('dw').style.display='none';
   document.getElementById('sents').innerHTML='';
   addSE(); om('mCust');
@@ -1823,9 +1811,6 @@ function openEdit(id){
   document.getElementById('sents').innerHTML='';
   (c.subscriptions||[]).filter(s=>!s.isCardGroup).forEach(s=>addSE(s));
   if(!(c.subscriptions||[]).some(s=>!s.isCardGroup)) addSE();
-  const _es=document.getElementById('fSrc');if(_es)_es.value=c.source||'';
-  const _er=document.getElementById('fRef');if(_er)_er.value=c.referredBy||'';
-  const _erw=document.getElementById('fRefRow');if(_erw)_erw.style.display=c.source==='referral'?'':'none';
   om('mCust');
 }
 function clrDW(){document.getElementById('dw').style.display='none';}
@@ -1944,8 +1929,6 @@ function saveCust(){
   const name=(document.getElementById('fN').value||'').trim(); if(!name){notify('⚠️ أدخل الاسم','wa');return;}
   const phone=(document.getElementById('fP').value||'').trim();
   const notes=(document.getElementById('fNt').value||'').trim();
-  const source=(document.getElementById('fSrc')||{}).value||'';
-  const referredBy=((document.getElementById('fRef')||{}).value||'').trim();
   const delivery={locationLink:(document.getElementById('fLL').value||'').trim(),address:(document.getElementById('fAdr').value||'').trim(),agentPhone:(document.getElementById('fAP').value||'').trim()};
   const newSubs=[];
   document.querySelectorAll('#sents .sent').forEach(e=>{
@@ -1964,10 +1947,10 @@ function saveCust(){
   });
   if(eId){
     const i=db.customers.findIndex(c=>c.id===eId);
-    if(i>-1){const cgs=(db.customers[i].subscriptions||[]).filter(s=>s.isCardGroup);db.customers[i]={...db.customers[i],name,phone,notes,source,referredBy,delivery,subscriptions:[...newSubs,...cgs],updatedAt:new Date().toISOString()};}
+    if(i>-1){const cgs=(db.customers[i].subscriptions||[]).filter(s=>s.isCardGroup);db.customers[i]={...db.customers[i],name,phone,notes,delivery,subscriptions:[...newSubs,...cgs],updatedAt:new Date().toISOString()};}
     notify('✅ تم التحديث');
   } else {
-    db.customers.push({id:uid(),name,phone,notes,source,referredBy,delivery,subscriptions:newSubs,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    db.customers.push({id:uid(),name,phone,notes,delivery,subscriptions:newSubs,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
     notify('✅ تمت الإضافة');
   }
   save(); cm('mCust'); rC();
@@ -2495,14 +2478,7 @@ function autoFL(sn,i,uv){const rate=n2(db.settings.usdRate);if(!rate)return;cons
 function getAlerts(){
   const r=[];
   db.customers.forEach(c=>(c.subscriptions||[]).forEach(s=>{if(!s.isCardGroup&&s.expiry){const d=du(s.expiry);if(d<=7)r.push({type:'sub',cust:c,sub:s,days:d});}}));
-  db.accounts.forEach(a=>{
-    if(!a.nextPaymentDate)return;
-    const d=du(a.nextPaymentDate);
-    if(d>5)return;
-    const confirmed=a.renewConfirmed&&a.renewConfirmedDate===a.nextPaymentDate;
-    if(confirmed)return;
-    r.push({type:'acct',acct:a,days:d});
-  });
+  db.accounts.forEach(a=>{if(!a.nextPaymentDate)return;const d=du(a.nextPaymentDate);if(d<=5)r.push({type:'acct',acct:a,days:d});});
   return r.sort((a,b)=>{
     if(alertSort==='desc'){
       // الأكثر أياماً أولاً (المنتهية في الأخير)
@@ -2543,28 +2519,7 @@ function rAlerts(){
       const lbl=a.days<0?`متأخر ${Math.abs(a.days)}ي`:a.days===0?'اليوم':`بعد ${a.days}ي`;
       const cls=a.days<=0?'ur':a.days<=3?'so':'';
       const conf=acc.renewConfirmed&&acc.renewConfirmedDate===acc.nextPaymentDate;
-      return`<div class="ai ${cls}">
-        <div style="font-size:1.05rem">${icon}</div>
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:.8rem;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">
-            🗂️ ${esc(acc.service)}
-            <span style="font-size:.57rem;background:rgba(0,206,201,.1);color:var(--cd);padding:.03rem .34rem;border-radius:20px;font-weight:700">تجديد حساب</span>
-            ${conf?'<span style="font-size:.57rem;background:rgba(0,184,148,.12);color:var(--ok);padding:.03rem .34rem;border-radius:20px;font-weight:700">✅ مؤكد</span>':''}
-          </div>
-          <div style="font-size:.65rem;color:var(--mu);display:flex;gap:.3rem;flex-wrap:wrap;margin-top:2px">
-            <span dir="ltr">${esc(acc.email)}</span><span dir="ltr">📅 ${toDMY(acc.nextPaymentDate)}</span>
-          </div>
-          <div id="acctDetail_${acc.id}" style="display:none"></div>
-        </div>
-        <div style="text-align:left;flex-shrink:0">
-          <div class="ai-d ${cls}" style="font-size:.7rem">${lbl}</div>
-          <div style="display:flex;gap:.25rem;margin-top:.25rem;flex-wrap:wrap;justify-content:flex-end">
-            ${!conf?`<button class="btn bs btn-xs" onclick="confAcct('${acc.id}')">✅ تأكيد</button>`:`<button class="btn bg btn-xs" onclick="unconfAcct('${acc.id}')">↩️ إلغاء</button>`}
-            <button class="btn bg btn-xs" onclick="toggleAcctDetail('${acc.id}')">🔍 عرض</button>
-            <button class="btn bc btn-xs" onclick="openAcctM('${acc.id}')">✏️</button>
-          </div>
-        </div>
-      </div>`;
+      return`<div class="ai ${cls}"><div style="font-size:1.05rem">${icon}</div><div style="flex:1"><div style="font-weight:700;font-size:.8rem;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">🗂️ ${acc.service}<span style="font-size:.57rem;background:rgba(0,206,201,.1);color:var(--cd);padding:.03rem .34rem;border-radius:20px;font-weight:700">تجديد حساب</span>${conf?'<span style="font-size:.57rem;background:rgba(0,184,148,.12);color:var(--ok);padding:.03rem .34rem;border-radius:20px;font-weight:700">✅ مؤكد</span>':''}</div><div style="font-size:.65rem;color:var(--mu);display:flex;gap:.3rem;flex-wrap:wrap;margin-top:2px"><span dir="ltr">${acc.email}</span><span dir="ltr">📅 ${toDMY(acc.nextPaymentDate)}</span></div></div><div style="text-align:left"><div class="ai-d ${cls}" style="font-size:.7rem">${lbl}</div><div style="display:flex;gap:.25rem;margin-top:.25rem;flex-wrap:wrap">${!conf?`<button class="btn bs btn-xs" onclick="confAcct('${acc.id}')">✅ تأكيد</button>`:`<button class="btn bg btn-xs" onclick="unconfAcct('${acc.id}')">↩️ إلغاء</button>`}<button class="btn bg btn-xs" onclick="sw('accts');setTimeout(()=>selAT('${esc(acc.service)}'),80)">عرض</button></div></div></div>`;
     }
     const urg=a.days<=th;const srv=db.services.find(x=>x.name===a.sub.service)||{color:'#7c6aff'};
     const icon=a.days<0?'🔴':a.days===0?'🟠':urg?'🟡':'🟢';
@@ -2577,80 +2532,6 @@ function rAlerts(){
 }
 function confAcct(id){const i=db.accounts.findIndex(a=>a.id===id);if(i<0)return;db.accounts[i].renewConfirmed=true;db.accounts[i].renewConfirmedDate=db.accounts[i].nextPaymentDate;save();rAlerts();rA();notify('✅ تم تأكيد التجديد');}
 function unconfAcct(id){const i=db.accounts.findIndex(a=>a.id===id);if(i<0)return;db.accounts[i].renewConfirmed=false;save();rAlerts();rA();notify('↩️ تم الإلغاء');}
-
-function toggleAcctDetail(id) {
-  const el = document.getElementById('acctDetail_'+id);
-  if (!el) return;
-  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
-  const acc = db.accounts.find(a=>a.id===id);
-  if (!acc) return;
-  const srv = db.services.find(x=>x.name===acc.service)||{color:'#7c6aff'};
-  const subs = db.customers.flatMap(c=>(c.subscriptions||[]).filter(s=>s.accountId===id||s.account===acc.email));
-  const usedSlots = subs.length;
-  const totalSlots = acc.slots||'—';
-  el.innerHTML = `<div style="margin-top:.55rem;background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:.7rem .8rem;position:relative">
-    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${srv.color};border-radius:10px 10px 0 0"></div>
-    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.45rem">
-      <div style="flex:1;min-width:120px">
-        <div style="font-size:.58rem;color:var(--mu);margin-bottom:.1rem">الخدمة</div>
-        <div style="font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:.3rem">
-          <span style="width:8px;height:8px;border-radius:50%;background:${srv.color};display:inline-block"></span>
-          ${esc(acc.service)}
-        </div>
-      </div>
-      <div>
-        <div style="font-size:.58rem;color:var(--mu);margin-bottom:.1rem">المقاعد</div>
-        <div style="font-size:.78rem;font-weight:800;color:${usedSlots>=totalSlots?'var(--er)':'var(--ok)'}">
-          ${usedSlots} / ${totalSlots}
-        </div>
-      </div>
-      ${acc.renewCost!=null&&acc.renewCost!==''?`<div>
-        <div style="font-size:.58rem;color:var(--mu);margin-bottom:.1rem">تكلفة الاشتراك</div>
-        <div style="font-size:.78rem;font-weight:800;color:var(--er)" dir="rtl">${n2(acc.renewCost).toFixed(2)} ${CUR}</div>
-      </div>`:''}
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.45rem">
-      <div style="background:var(--s2);border-radius:7px;padding:.4rem .55rem">
-        <div style="font-size:.57rem;color:var(--mu);margin-bottom:.15rem">📧 الإيميل</div>
-        <div style="font-size:.7rem;font-weight:700;direction:ltr;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(acc.email)}</div>
-        <button class="btn bg btn-xs" style="margin-top:.25rem;width:100%" onclick="cpt('${esc(acc.email)}',this)">📋 نسخ</button>
-      </div>
-      <div style="background:var(--s2);border-radius:7px;padding:.4rem .55rem">
-        <div style="font-size:.57rem;color:var(--mu);margin-bottom:.15rem">🔑 كلمة السر</div>
-        <div style="font-size:.7rem;font-weight:700;direction:ltr;text-align:left" id="apwd_${id}">••••••••</div>
-        <div style="display:flex;gap:.2rem;margin-top:.25rem">
-          <button class="btn bg btn-xs" style="flex:1" onclick="var e=document.getElementById('apwd_${id}');e.textContent=e.textContent==='••••••••'?'${esc(acc.password||'')}':'••••••••'">👁️</button>
-          <button class="btn bg btn-xs" style="flex:1" onclick="cpt('${esc(acc.password||'')}',this)">📋</button>
-        </div>
-      </div>
-    </div>
-    ${acc.nextPaymentDate?`<div style="display:flex;align-items:center;gap:.4rem;background:rgba(253,203,110,.07);border:1px solid rgba(253,203,110,.25);border-radius:7px;padding:.4rem .6rem;margin-bottom:.4rem">
-      <span style="font-size:.85rem">📅</span>
-      <div style="flex:1;font-size:.68rem">
-        <span style="color:var(--mu)">موعد التجديد: </span>
-        <b style="color:var(--wa)">${toDMY(acc.nextPaymentDate)}</b>
-      </div>
-      <span style="font-size:.65rem;font-weight:700;color:${du(acc.nextPaymentDate)<=0?'var(--er)':'var(--wa)'}">
-        ${du(acc.nextPaymentDate)<0?'متأخر '+Math.abs(du(acc.nextPaymentDate))+'ي':du(acc.nextPaymentDate)===0?'اليوم':'بعد '+du(acc.nextPaymentDate)+'ي'}
-      </span>
-    </div>`:''}
-    ${acc.note?`<div style="font-size:.65rem;color:var(--mu);background:var(--s2);border-radius:6px;padding:.3rem .5rem">📝 ${esc(acc.note)}</div>`:''}
-    ${subs.length?`<div style="margin-top:.4rem">
-      <div style="font-size:.6rem;color:var(--mu);margin-bottom:.25rem">المستخدمون الحاليون (${subs.length}):</div>
-      ${subs.map(s=>{
-        const cust=db.customers.find(c=>(c.subscriptions||[]).some(x=>x.id===s.id));
-        if(!cust) return '';
-        const d=du(s.expiry);
-        return `<div style="display:flex;align-items:center;gap:.35rem;background:var(--s2);border-radius:6px;padding:.3rem .5rem;margin-bottom:.2rem">
-          <div style="flex:1;font-size:.68rem;font-weight:700">${esc(cust.name)}</div>
-          ${s.profileSlot?`<div style="font-size:.6rem;color:var(--cd)">🎭 ${esc(s.profileSlot)}</div>`:''}
-          <div style="font-size:.6rem;color:${d<0?'var(--er)':d<=3?'var(--wa)':'var(--mu)'}" dir="ltr">${s.expiry?toDMY(s.expiry):'—'}</div>
-        </div>`;
-      }).join('')}
-    </div>`:''}
-  </div>`;
-  el.style.display = 'block';
-}
 
 // ══════════════════════════════════════════
 // FINANCE
@@ -3680,9 +3561,10 @@ function _timingSafeEq(a, b) {
         const parsed = JSON.parse(sbRaw);
         if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
           loaded = parsed;
-          // حفظ في localStorage كـ cache — plain JSON
+          // حفظ في localStorage كـ cache
           try {
-            localStorage.setItem('subs_v5', JSON.stringify(loaded));
+            const plain = JSON.stringify(loaded);
+            localStorage.setItem('subs_v5', encKey ? _xorEnc(plain, encKey) : plain);
           } catch(e) {}
         }
       }
