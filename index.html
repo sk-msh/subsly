@@ -99,7 +99,6 @@ header{position:sticky;top:0;z-index:100;background:rgba(7,7,15,.97);border-bott
 .fr{margin-bottom:.7rem;}
 .fl{font-size:.68rem;font-weight:700;color:var(--mu);margin-bottom:.22rem;display:block;}
 .fi,.fs{width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--tx);font-family:'Cairo',sans-serif;font-size:.8rem;padding:.45rem .7rem;border-radius:7px;outline:none;}
-input[type="date"].fi{color-scheme:dark;}
 .fi:focus,.fs:focus{border-color:var(--ac);}
 .fi[readonly]{opacity:.6;}
 .fs option{background:var(--s2);}
@@ -511,12 +510,9 @@ mark{background:rgba(108,92,231,.3);color:var(--ach);border-radius:3px;padding:0
         <div class="fr" style="margin:0"><label class="fl">📞 رقم التوصيل</label><input class="fi" id="fAP" dir="ltr"></div>
       </div>
     </details>
-    <div class="dv">📦 الاشتراكات (اختياري)</div>
-    <div id="sentsEmpty" style="font-size:.7rem;color:var(--mu);text-align:center;padding:.6rem;background:var(--s2);border:1px dashed var(--b1);border-radius:8px;margin-bottom:.5rem">
-      لا يوجد اشتراك — يمكنك حفظ الزبون الآن وإضافة اشتراكه لاحقاً من صفحته
-    </div>
+    <div class="dv">📦 الاشتراكات</div>
     <div id="sents" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.5rem"></div>
-    <button class="adds" onclick="addSE();toggleSentsEmpty()">➕ إضافة اشتراك</button>
+    <button class="adds" onclick="addSE()">➕ إضافة اشتراك</button>
     <div style="display:flex;gap:.45rem;margin-top:.9rem">
       <button class="btn bp" style="flex:1" onclick="saveCust()">💾 حفظ</button>
       <button class="btn bg" onclick="cm('mCust')">إلغاء</button>
@@ -933,60 +929,6 @@ function blurD(el) {
 }
 function setDV(el, iso) { if (el) el.value = iso ? toDMY(iso) : ''; }
 function getDV(el) { return el ? toISO(el.value) : ''; }
-function toggleSentsEmpty() {
-  const empty = document.getElementById('sentsEmpty');
-  const hasItems = document.querySelectorAll('#sents .sent').length > 0;
-  if (empty) empty.style.display = hasItems ? 'none' : 'block';
-}
-
-// ── Calendar popup for start date: "today" or pick a date ──
-function toggleStartCal(btn) {
-  const existing = document.getElementById('_startCalPop');
-  if (existing) { existing.remove(); if (existing.dataset.forBtn === btn.dataset.id) return; }
-
-  const fr = btn.closest('.fr');
-  const input = fr.querySelector('.se-start');
-  const sentEl = input.closest('.sent');
-
-  const pop = document.createElement('div');
-  pop.id = '_startCalPop';
-  pop.style.cssText = 'position:absolute;top:100%;left:0;z-index:200;background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:.6rem;margin-top:.3rem;box-shadow:0 8px 24px rgba(0,0,0,.4);min-width:200px';
-  pop.innerHTML = `
-    <button type="button" class="btn bc btn-sm" style="width:100%;margin-bottom:.4rem" onclick="_startCalToday(this)">📍 يبدأ اليوم</button>
-    <div style="font-size:.62rem;color:var(--mu);margin-bottom:.25rem">أو اختر تاريخاً محدداً:</div>
-    <input type="date" class="fi" style="width:100%" onchange="_startCalPick(this)">
-  `;
-  fr.style.position = 'relative';
-  fr.appendChild(pop);
-
-  // إغلاق عند الضغط خارج المنبثق
-  setTimeout(() => {
-    document.addEventListener('click', function closePop(e) {
-      if (!pop.contains(e.target) && e.target !== btn) {
-        pop.remove();
-        document.removeEventListener('click', closePop);
-      }
-    });
-  }, 10);
-}
-function _startCalToday(btn) {
-  const pop = document.getElementById('_startCalPop');
-  const fr = pop.closest('.fr');
-  const input = fr.querySelector('.se-start');
-  const todayISO = new Date().toISOString().slice(0,10);
-  setDV(input, todayISO);
-  calcExp(input.closest('.sent'));
-  pop.remove();
-}
-function _startCalPick(dateInput) {
-  if (!dateInput.value) return;
-  const pop = document.getElementById('_startCalPop');
-  const fr = pop.closest('.fr');
-  const input = fr.querySelector('.se-start');
-  setDV(input, dateInput.value);
-  calcExp(input.closest('.sent'));
-  pop.remove();
-}
 
 // ══════════════════════════════════════════
 // UTILS
@@ -1066,7 +1008,7 @@ const gSP   = s => { if(s&&s.accountId){const a=gAcct(s.accountId);if(a)return a
 const gP    = n => { if(!db.prices[n]||typeof db.prices[n]!=='object'||!db.prices[n].type) db.prices[n]={type:'months',tiers:[]}; return db.prices[n]; };
 const gCost = s => { const p=gP(s.service); if(!p||!p.tiers) return 0; const tier=p.tiers.find(t=>(t.label&&t.label===s.tierLabel)||(t.months&&String(t.months)===String(s.months))||(t.usd&&String(t.usd)===String(s.usdValue))); if(tier&&tier.costPrice!=null&&tier.costPrice!=='') return n2(tier.costPrice); const byP=p.tiers.find(t=>n2(t.price)===n2(s.price)&&t.costPrice!=null&&t.costPrice!==''); return byP?n2(byP.costPrice):0; };
 const mof   = s => (s&&PM[s.payMethod])?s.payMethod:'cash';
-const subOwes = s => !s.isCardGroup && !s.cancelled && !!s.isDebt && !s.debtPaid;
+const subOwes = s => !s.isCardGroup && !!s.isDebt && !s.debtPaid;
 const subDV   = s => { const v=Number((s.debtAmount!=null&&s.debtAmount!=='') ? s.debtAmount : s.price); return (isNaN(v)||v<0)?0:v; };
 const custOwes = c => {
   let t = 0;
@@ -1133,13 +1075,11 @@ function ensureC(c) {
   if(!c.id) c.id=uid();
   if(!c.delivery||typeof c.delivery!=='object') c.delivery={locationLink:'',address:'',agentPhone:''};
   if(!Array.isArray(c.subscriptions)) c.subscriptions=[];
-  if(!Array.isArray(c.archivedSubs)) c.archivedSubs=[];
   c.subscriptions.forEach(s=>{
     if(!s.id) s.id=uid();
     if(s.isCardGroup){ if(!Array.isArray(s.cardIds))s.cardIds=[]; if(s.debtAmount===undefined)s.debtAmount=0; return; }
     if(s.isDebt===undefined) s.isDebt=false;
     if(s.debtPaid===undefined) s.debtPaid=false;
-    if(s.cancelled===undefined) s.cancelled=false;
     if(!s.payMethod||!PM[s.payMethod]) s.payMethod='cash';
     if(s.accountId===undefined) s.accountId='';
   });
@@ -1589,9 +1529,9 @@ function rC() {
   });
   if(svcFilt) list=list.filter(c=>(c.subscriptions||[]).some(s=>s.service===svcFilt));
   const th=Number(db.settings.alertDays)||3;
-  if(cFilt==='active') list=list.filter(c=>(c.subscriptions||[]).some(s=>!s.isCardGroup&&!s.cancelled&&s.expiry&&du(s.expiry)>0));
-  else if(cFilt==='expiring') list=list.filter(c=>(c.subscriptions||[]).some(s=>{if(s.isCardGroup||s.cancelled||!s.expiry)return false;const d=du(s.expiry);return d>=0&&d<=th;}));
-  else if(cFilt==='expired') list=list.filter(c=>(c.subscriptions||[]).some(s=>!s.isCardGroup&&!s.cancelled&&s.expiry&&du(s.expiry)<0));
+  if(cFilt==='active') list=list.filter(c=>(c.subscriptions||[]).some(s=>!s.isCardGroup&&s.expiry&&du(s.expiry)>0));
+  else if(cFilt==='expiring') list=list.filter(c=>(c.subscriptions||[]).some(s=>{if(s.isCardGroup||!s.expiry)return false;const d=du(s.expiry);return d>=0&&d<=th;}));
+  else if(cFilt==='expired') list=list.filter(c=>(c.subscriptions||[]).some(s=>!s.isCardGroup&&s.expiry&&du(s.expiry)<0));
   else if(cFilt==='debt') list=list.filter(custHasDebt);
   if(sort==='name') list.sort((a,b)=>a.name.localeCompare(b.name,'ar'));
   else if(sort==='debt') list.sort((a,b)=>custOwes(b)-custOwes(a));
@@ -1615,7 +1555,7 @@ function rC() {
             ${c.phone||'بدون رقم'}
             ${c.phone?`<button class="btn bg btn-xs" style="padding:.04rem .3rem" onclick="event.stopPropagation();cpt('${esc(c.phone)}',this)">📋</button>`:''}
             ${hd?`<span style="background:rgba(232,67,147,.12);color:var(--er);border:1px solid rgba(232,67,147,.28);font-size:.58rem;font-weight:700;padding:.04rem .32rem;border-radius:20px">⚠️ ${td.toFixed(0)} ${CUR}</span>`:''}
-            ${(()=>{const rev=(c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled).reduce((a,s)=>a+n2(s.price),0);const cost=(c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled).reduce((a,s)=>a+gCost(s),0);const prof=rev-cost-td;return cost>0?`<span style="font-size:.58rem;font-weight:700;padding:.04rem .32rem;border-radius:20px;background:${prof>=0?'rgba(0,184,148,.1)':'rgba(232,67,147,.1)'};color:${prof>=0?'var(--ok)':'var(--er)'}">ربح: ${prof.toFixed(0)} ${CUR}</span>`:'';})()}
+            ${(()=>{const rev=(c.subscriptions||[]).filter(s=>!s.isCardGroup).reduce((a,s)=>a+n2(s.price),0);const cost=(c.subscriptions||[]).filter(s=>!s.isCardGroup).reduce((a,s)=>a+gCost(s),0);const prof=rev-cost-td;return cost>0?`<span style="font-size:.58rem;font-weight:700;padding:.04rem .32rem;border-radius:20px;background:${prof>=0?'rgba(0,184,148,.1)':'rgba(232,67,147,.1)'};color:${prof>=0?'var(--ok)':'var(--er)'}">ربح: ${prof.toFixed(0)} ${CUR}</span>`:'';})()}
           </div>
         </div>
       </div>
@@ -1634,9 +1574,6 @@ function rC() {
 function siH(s) {
   const srv=db.services.find(x=>x.name===s.service)||{color:'#7c6aff'};
   const dot=`<div style="width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px;background:${srv.color}"></div>`;
-  if(s.cancelled && !s.isCardGroup){
-    return `<div class="si" style="opacity:.55">${dot}<div style="flex:1;min-width:0"><div style="font-size:.72rem;font-weight:700;text-decoration:line-through">${s.service}</div><div style="font-size:.6rem;color:var(--mu)">تم الإلغاء — لا يُحسب</div></div><span class="eb er" style="flex-shrink:0">🚫 ملغي</span></div>`;
-  }
   if(s.isCardGroup){
     const cards=(s.cardIds||[]).map(id=>db.cards.find(c=>c.id===id)).filter(Boolean);
     const tU=cards.reduce((a,c)=>a+n2(c.value),0);
@@ -1713,67 +1650,19 @@ function renderCustHistory(cid) {
   const pane = document.getElementById('vcPane2');
   if(!c || !pane) return;
 
-  const activeSubs   = (c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled);
-  const archivedSubs = (c.archivedSubs||[]).filter(s=>!s.cancelled);
-  const cancelledSubs = [...(c.subscriptions||[]),...(c.archivedSubs||[])].filter(s=>!s.isCardGroup&&s.cancelled);
-  const allSubs = [...activeSubs, ...archivedSubs];
-
-  if(!allSubs.length && !cancelledSubs.length) {
+  const subs = (c.subscriptions||[]).filter(s=>!s.isCardGroup);
+  if(!subs.length) {
     pane.innerHTML='<div style="color:var(--mu);font-size:.78rem;text-align:center;padding:1rem">لا توجد اشتراكات</div>';
     return;
   }
-  if(!allSubs.length) {
-    pane.innerHTML='<div style="color:var(--mu);font-size:.78rem;text-align:center;padding:1rem">لا توجد اشتراكات محسوبة (الكل ملغي)</div>';
-    return;
-  }
 
-  // ── Helper: build timeline entries for one subscription ──
-  function buildEntries(s) {
-    const entries = [];
-    if(s.renewHistory && s.renewHistory.length) {
-      const first = s.renewHistory[0];
-      entries.push({
-        label: 'اشتراك أول',
-        start: s.start || '',
-        from: s.start || '',
-        to: first.from,
-        price: s.price,
-        months: s.months,
-        isOriginal: true
-      });
-      s.renewHistory.forEach((r,i)=>{
-        entries.push({
-          label: 'تجديد '+(i+1),
-          start: r.start,
-          from: r.from,
-          to: r.to,
-          price: r.price,
-          months: r.months,
-          renewedAt: r.renewedAt,
-          isOriginal: false
-        });
-      });
-    } else {
-      entries.push({
-        label: s.archivedAt ? 'اشتراك أول' : 'الاشتراك الحالي',
-        start: s.start,
-        from: s.start,
-        to: s.expiry,
-        price: s.price,
-        months: s.months,
-        isOriginal: true
-      });
-    }
-    return entries;
-  }
-
-  // ── Summary cards (تشمل الاشتراكات المؤرشفة/المحذوفة) ──
-  const totalPaid = allSubs.reduce((a,s)=>{
-    const entries = buildEntries(s);
-    return a + entries.reduce((b,e)=>b+n2(e.price),0);
+  // ── Summary cards ──
+  const totalPaid = subs.reduce((a,s)=>{
+    const hist = (s.renewHistory||[]).reduce((b,r)=>b+n2(r.price),0);
+    return a + n2(s.price) + hist;
   },0);
-  const totalRenewals = allSubs.reduce((a,s)=>a+(s.renewHistory||[]).length,0);
-  const firstStart = allSubs.reduce((a,s)=>{
+  const totalRenewals = subs.reduce((a,s)=>a+(s.renewHistory||[]).length,0);
+  const firstStart = subs.reduce((a,s)=>{
     const h = s.renewHistory||[];
     const dates = [s.start, ...h.map(r=>r.start)].filter(Boolean).sort();
     return dates[0]&&(!a||dates[0]<a)?dates[0]:a;
@@ -1794,14 +1683,55 @@ function renderCustHistory(cid) {
     </div>
   </div>`;
 
-  // ── Per service history — نشط ثم مؤرشف ──
-  function renderServiceCard(s, isArchived) {
+  // ── Per service history ──
+  const srvHistory = subs.map(s=>{
     const srv = db.services.find(x=>x.name===s.service)||{color:'#7c6aff'};
-    const entries = buildEntries(s);
+
+    // Build timeline — original + renewals
+    const entries = [];
+    // Earliest entry from renewHistory if exists
+    if(s.renewHistory && s.renewHistory.length) {
+      // First entry (original) — before first renewal
+      const first = s.renewHistory[0];
+      entries.push({
+        label: 'اشتراك أول',
+        start: s.start && s.renewHistory.length ? '' : s.start,
+        from: '',
+        to: first.from,
+        price: s.price,
+        months: s.months,
+        isOriginal: true
+      });
+      // Each renewal
+      s.renewHistory.forEach((r,i)=>{
+        entries.push({
+          label: 'تجديد '+(i+1),
+          start: r.start,
+          from: r.from,
+          to: r.to,
+          price: r.price,
+          months: r.months,
+          renewedAt: r.renewedAt,
+          isOriginal: false
+        });
+      });
+    } else {
+      // No renewals yet — just show current
+      entries.push({
+        label: 'الاشتراك الحالي',
+        start: s.start,
+        from: s.start,
+        to: s.expiry,
+        price: s.price,
+        months: s.months,
+        isOriginal: true
+      });
+    }
+
     const totalSrv = entries.reduce((a,e)=>a+n2(e.price),0);
-    const d = s.expiry ? du(s.expiry) : 9999;
-    const statusCls = isArchived ? '' : (d<0?'er':d<=3?'wa':'ok');
-    const statusLbl = isArchived ? '🗑️ محذوف' : (d<0?'منتهي':d===0?'اليوم':'نشط');
+    const d = du(s.expiry);
+    const statusCls = d<0?'er':d<=3?'wa':'ok';
+    const statusLbl = d<0?'منتهي':d===0?'اليوم':'نشط';
 
     const timeline = entries.map((e,i)=>`
       <div style="display:flex;gap:.5rem;position:relative">
@@ -1823,37 +1753,17 @@ function renderCustHistory(cid) {
         </div>
       </div>`).join('');
 
-    return`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:.75rem .85rem;margin-bottom:.6rem;${isArchived?'opacity:.7':''}">
+    return`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:.75rem .85rem;margin-bottom:.6rem">
       <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.65rem;flex-wrap:wrap">
         <div style="width:8px;height:8px;border-radius:50%;background:${srv.color}"></div>
         <strong style="font-size:.84rem;flex:1">${s.service}</strong>
-        ${statusCls?`<span class="eb ${statusCls}">${statusLbl}</span>`:`<span style="font-size:.6rem;font-weight:700;color:var(--mu);background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:.06rem .4rem">${statusLbl}</span>`}
-        ${s.expiry?`<span style="font-size:.63rem;color:var(--mu)" dir="ltr">${toDMY(s.expiry)}</span>`:''}
+        <span class="eb ${statusCls}">${statusLbl}</span>
+        <span style="font-size:.63rem;color:var(--mu)" dir="ltr">${s.expiry?toDMY(s.expiry):'—'}</span>
         <span style="font-size:.65rem;font-weight:700;color:var(--ok)" dir="rtl">∑ ${totalSrv.toFixed(2)} ${CUR}</span>
       </div>
       <div style="padding-right:.25rem">${timeline}</div>
     </div>`;
-  }
-
-  const activeHtml   = activeSubs.map(s=>renderServiceCard(s,false)).join('');
-  const archivedHtml = archivedSubs.length
-    ? `<div style="font-size:.65rem;font-weight:800;color:var(--mu);margin:.7rem 0 .4rem">🗑️ اشتراكات محذوفة (للأرشيف فقط)</div>`
-      + archivedSubs.map(s=>renderServiceCard(s,true)).join('')
-    : '';
-  const cancelledHtml = cancelledSubs.length
-    ? `<div style="font-size:.65rem;font-weight:800;color:var(--er);margin:.7rem 0 .4rem">🚫 اشتراكات ملغية (تم رد المال — غير محسوبة)</div>`
-      + cancelledSubs.map(s=>{
-          const srv = db.services.find(x=>x.name===s.service)||{color:'#7c6aff'};
-          return `<div style="background:var(--s2);border:1px dashed rgba(232,67,147,.35);border-radius:12px;padding:.6rem .8rem;margin-bottom:.4rem;opacity:.65">
-            <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
-              <div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div>
-              <strong style="font-size:.78rem;flex:1;text-decoration:line-through">${s.service}</strong>
-              <span style="font-size:.6rem;font-weight:700;color:var(--er);background:rgba(232,67,147,.1);border-radius:20px;padding:.06rem .4rem">🚫 ملغي</span>
-              ${(s.price!=null&&s.price!=='')?`<span style="font-size:.62rem;color:var(--mu)" dir="rtl">${n2(s.price).toFixed(2)} ${CUR}</span>`:''}
-            </div>
-          </div>`;
-        }).join('')
-    : '';
+  }).join('');
 
   // ── Manual debts history ──
   const paidDebts = db.manualDebts.filter(d=>d.customerId===cid&&d.paid);
@@ -1866,7 +1776,7 @@ function renderCustHistory(cid) {
     </div>`).join('')}
   </div>`:'';
 
-  pane.innerHTML = summary + activeHtml + archivedHtml + cancelledHtml + debtH;
+  pane.innerHTML = summary + srvHistory + debtH;
 }
 
 function viewCCards(cid,srvFilter) {
@@ -1896,10 +1806,7 @@ function openAdd(){
   const fr=document.getElementById('fRefRow');if(fr)fr.style.display='none';
   document.getElementById('dw').style.display='none';
   document.getElementById('sents').innerHTML='';
-  // لا نضيف اشتراكاً افتراضياً — الزبون يمكن حفظه بدون اشتراك
-  // اضغط "➕ إضافة اشتراك" أدناه إذا أردت إضافة اشتراك الآن
-  toggleSentsEmpty();
-  om('mCust');
+  addSE(); om('mCust');
 }
 function openEdit(id){
   const c=db.customers.find(x=>x.id===id); if(!c) return;
@@ -1915,10 +1822,10 @@ function openEdit(id){
   document.getElementById('dw').style.display='none';
   document.getElementById('sents').innerHTML='';
   (c.subscriptions||[]).filter(s=>!s.isCardGroup).forEach(s=>addSE(s));
+  if(!(c.subscriptions||[]).some(s=>!s.isCardGroup)) addSE();
   const _es=document.getElementById('fSrc');if(_es)_es.value=c.source||'';
   const _er=document.getElementById('fRef');if(_er)_er.value=c.referredBy||'';
   const _erw=document.getElementById('fRefRow');if(_erw)_erw.style.display=c.source==='referral'?'':'none';
-  toggleSentsEmpty();
   om('mCust');
 }
 function clrDW(){document.getElementById('dw').style.display='none';}
@@ -1942,7 +1849,7 @@ function addSE(data={}) {
   const opts=db.services.map(s=>`<option value="${safe(s.name)}"${svc===s.name?' selected':''}>${s.name}</option>`).join('');
   const div=document.createElement('div'); div.className='sent';
   div.dataset.sid=data.id||''; div.dataset.dp=data.debtPaid?'1':'';
-  div.innerHTML=`<div class="sh"><span style="font-size:.68rem;font-weight:700;color:var(--mu)">📦 اشتراك</span><button class="rm" onclick="this.closest('.sent').remove();toggleSentsEmpty()" title="حذف هذا الاشتراك">✕ حذف</button></div>
+  div.innerHTML=`<div class="sh"><span style="font-size:.68rem;font-weight:700;color:var(--mu)">📦 اشتراك</span><button class="rm" onclick="this.closest('.sent').remove()">✕</button></div>
     <div class="fg2" style="margin-bottom:.5rem">
       <div class="fr" style="margin:0"><label class="fl">الخدمة</label><select class="fs se-srv" onchange="onSvC(this)">${opts}</select></div>
       <div class="fr" style="margin:0"><label class="fl">الباقة</label><select class="fs st-sel" onchange="onTierC(this)"></select></div>
@@ -1954,13 +1861,7 @@ function addSE(data={}) {
     </div>
     <input type="hidden" class="se-aid">
     <div class="fg2" style="margin-bottom:.5rem">
-      <div class="fr" style="margin:0;position:relative">
-        <label class="fl">📅 بداية</label>
-        <div style="position:relative;display:flex;gap:.25rem">
-          <input class="fi se-start" placeholder="DD/MM/YYYY" inputmode="numeric" dir="ltr" oninput="fmtD(this);calcExp(this.closest('.sent'))" onblur="blurD(this)" style="flex:1">
-          <button type="button" class="btn bg btn-xs" style="padding:.3rem .45rem" onclick="toggleStartCal(this)">🗓️</button>
-        </div>
-      </div>
+      <div class="fr" style="margin:0"><label class="fl">📅 بداية</label><input class="fi se-start" placeholder="DD/MM/YYYY" inputmode="numeric" dir="ltr" oninput="fmtD(this);calcExp(this.closest('.sent'))" onblur="blurD(this)"></div>
       <div class="fr" style="margin:0"><label class="fl">📆 انتهاء</label><input class="fi se-exp" placeholder="DD/MM/YYYY" inputmode="numeric" dir="ltr" style="border-color:rgba(108,92,231,.3);background:rgba(108,92,231,.05)" oninput="fmtD(this)" onblur="blurD(this)"></div>
     </div>
     <div class="fg2" style="margin-bottom:.5rem">
@@ -1972,12 +1873,6 @@ function addSE(data={}) {
       <div class="se-dw" style="margin-top:.4rem;display:${owes?'block':'none'}">
         <label class="fl" style="font-size:.63rem">قيمة الدين</label>
         <input class="fi se-da" type="number" min="0" step="0.01">
-      </div>
-    </div>
-    <div class="db-box" style="margin-top:.4rem;border-color:rgba(232,67,147,.25);background:rgba(232,67,147,.04)">
-      <label class="dck" style="color:var(--er)"><input type="checkbox" class="se-cancel"${data.cancelled?' checked':''} onchange="this.closest('.sent').querySelector('.se-cancel-note').style.display=this.checked?'block':'none'"> 🚫 ملغي (تم رد المال — لا يُحسب في الهستوري والتحاليل)</label>
-      <div class="se-cancel-note" style="margin-top:.35rem;font-size:.62rem;color:var(--mu);display:${data.cancelled?'block':'none'}">
-        هذا الاشتراك لن يُحسب في إجمالي المدفوع أو الإيرادات أو سجل الهستوري.
       </div>
     </div>
     <input type="hidden" class="se-m"><input type="hidden" class="se-tl">`;
@@ -2063,31 +1958,16 @@ function saveCust(){
     const tierLabel=e.querySelector('.se-tl').value||'';
     const prRaw=e.querySelector('.se-pr').value;const price=(prRaw!==''&&!isNaN(parseFloat(prRaw)))?parseFloat(prRaw):'';
     const payMethod=e.querySelector('.se-pay').value,isDebt=e.querySelector('.se-idt').checked;
-    const cancelled=e.querySelector('.se-cancel')?e.querySelector('.se-cancel').checked:false;
     const drRaw=e.querySelector('.se-da').value,debtPaid=e.dataset.dp==='1';
     let debtAmount=''; if(isDebt){const dr=parseFloat(drRaw);debtAmount=(!isNaN(dr)&&dr>=0)?dr:(price!==''?price:0);}
-    newSubs.push({id:e.dataset.sid||uid(),service,accountId:aid,account:aid?'':account,password:aid?'':password,start,expiry,months,tierLabel,price,payMethod,isDebt,debtPaid:isDebt?debtPaid:false,debtAmount,cancelled});
+    newSubs.push({id:e.dataset.sid||uid(),service,accountId:aid,account:aid?'':account,password:aid?'':password,start,expiry,months,tierLabel,price,payMethod,isDebt,debtPaid:isDebt?debtPaid:false,debtAmount});
   });
   if(eId){
     const i=db.customers.findIndex(c=>c.id===eId);
-    if(i>-1){
-      const oldCust=db.customers[i];
-      const cgs=(oldCust.subscriptions||[]).filter(s=>s.isCardGroup);
-      const oldNonCardSubs=(oldCust.subscriptions||[]).filter(s=>!s.isCardGroup);
-      const newIds=new Set(newSubs.map(s=>s.id));
-      // أي اشتراك كان موجوداً وحُذف من النموذج → يُنقل للأرشيف بدل أن يضيع
-      const removedSubs=oldNonCardSubs.filter(s=>!newIds.has(s.id));
-      if(removedSubs.length){
-        if(!oldCust.archivedSubs) oldCust.archivedSubs=[];
-        removedSubs.forEach(s=>{
-          oldCust.archivedSubs.push({...s, archivedAt:new Date().toISOString()});
-        });
-      }
-      db.customers[i]={...oldCust,name,phone,notes,source,referredBy,delivery,subscriptions:[...newSubs,...cgs],updatedAt:new Date().toISOString()};
-    }
+    if(i>-1){const cgs=(db.customers[i].subscriptions||[]).filter(s=>s.isCardGroup);db.customers[i]={...db.customers[i],name,phone,notes,source,referredBy,delivery,subscriptions:[...newSubs,...cgs],updatedAt:new Date().toISOString()};}
     notify('✅ تم التحديث');
   } else {
-    db.customers.push({id:uid(),name,phone,notes,source,referredBy,delivery,subscriptions:newSubs,archivedSubs:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    db.customers.push({id:uid(),name,phone,notes,source,referredBy,delivery,subscriptions:newSubs,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
     notify('✅ تمت الإضافة');
   }
   save(); cm('mCust'); rC();
@@ -2131,29 +2011,15 @@ function applyRenew(){
     const months=Math.max(1,parseInt(el.querySelector('.rmn').value)||1);
     const prRaw=el.querySelector('.rpr').value;
     const isExp=du(s.expiry)<0;
-    const prevExpiry=s.expiry; const prevPrice=s.price; const prevStart=s.start||'';
     let base=isExp&&renewBase==='now'?new Date():new Date(s.expiry+'T00:00:00');
     if(isNaN(base.getTime())) return;
     base.setMonth(base.getMonth()+months);
-    const newExpiry=base.toISOString().slice(0,10);
-    const newStart=new Date().toISOString().slice(0,10);
-    // تسجيل التجديد في السجل قبل تعديل أي قيمة — يحفظ السعر القديم كما كان
-    if(!s.renewHistory) s.renewHistory=[];
-    s.renewHistory.push({
-      from: prevExpiry,
-      to: newExpiry,
-      start: newStart,
-      months: months,
-      price: prevPrice,
-      renewedAt: new Date().toISOString()
-    });
-    s.expiry=newExpiry; s.months=months; s.start=newStart;
+    s.expiry=base.toISOString().slice(0,10);s.months=months;
     if(prRaw!==''){const v=parseFloat(prRaw);if(!isNaN(v)&&v>=0)s.price=v;}
     cnt++;
   });
   c.updatedAt=new Date().toISOString();
   save();cm('mRenew');rC();if(document.getElementById('mView').classList.contains('on'))viewC(renewCid);
-  _log('renew', c.name+' — تجديد '+cnt+' اشتراك');
   notify(`✅ تم تجديد ${cnt} اشتراك`);
 }
 function qRenew(cid,sid){
@@ -2628,7 +2494,7 @@ function autoFL(sn,i,uv){const rate=n2(db.settings.usdRate);if(!rate)return;cons
 // ══════════════════════════════════════════
 function getAlerts(){
   const r=[];
-  db.customers.forEach(c=>(c.subscriptions||[]).forEach(s=>{if(!s.isCardGroup&&!s.cancelled&&s.expiry){const d=du(s.expiry);if(d<=7)r.push({type:'sub',cust:c,sub:s,days:d});}}));
+  db.customers.forEach(c=>(c.subscriptions||[]).forEach(s=>{if(!s.isCardGroup&&s.expiry){const d=du(s.expiry);if(d<=7)r.push({type:'sub',cust:c,sub:s,days:d});}}));
   db.accounts.forEach(a=>{
     if(!a.nextPaymentDate)return;
     const d=du(a.nextPaymentDate);
@@ -2790,8 +2656,8 @@ function toggleAcctDetail(id) {
 // FINANCE
 // ══════════════════════════════════════════
 function rFinance(){
-  const allS  = db.customers.flatMap(c=>(c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled));
-  const allSx = db.customers.flatMap(c=>(c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled).map(s=>({...s,cN:c.name})));
+  const allS  = db.customers.flatMap(c=>(c.subscriptions||[]).filter(s=>!s.isCardGroup));
+  const allSx = db.customers.flatMap(c=>(c.subscriptions||[]).filter(s=>!s.isCardGroup).map(s=>({...s,cN:c.name})));
   const now   = new Date(); now.setHours(0,0,0,0);
   const thisY = now.getFullYear();
   const thisM = now.getMonth();
@@ -3806,8 +3672,23 @@ function _timingSafeEq(a, b) {
     if (ov) { ov.style.transition = 'opacity .3s'; ov.style.opacity = '0';
       setTimeout(() => { ov.style.display = 'none'; }, 320); }
 
-    // 3. Load data — localStorage فوراً (سريع)، Supabase في الخلفية بدون تجميد الواجهة
-    const loaded = _loadDB(encKey);
+    // 3. Load data — السحابة أولاً دائماً (المصدر الرئيسي)، ثم localStorage كاحتياط
+    let loaded = null;
+    try {
+      const sbRaw = await _sbGet('main_db_v1');
+      if (sbRaw) {
+        const parsed = JSON.parse(sbRaw);
+        if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
+          loaded = parsed;
+          // حفظ في localStorage كـ cache — plain JSON
+          try {
+            localStorage.setItem('subs_v5', JSON.stringify(loaded));
+          } catch(e) {}
+        }
+      }
+    } catch(e) { console.warn('Supabase load failed, falling back to localStorage', e); }
+    // إذا فشلت السحابة — استخدم localStorage كاحتياط
+    if (!loaded) { loaded = _loadDB(encKey); }
 
     // 4. Bootstrap db (same logic as original)
     if (!loaded) {
@@ -3834,64 +3715,12 @@ function _timingSafeEq(a, b) {
     db.customers.forEach(ensureC);
     CUR = String(db.settings.currency || 'د.ل');
 
-    // 5. Re-save (migrates plain data, ensures consistency)
+    // 5. Re-save with encryption (migrates plain data to encrypted)
     save();
 
-    // 6. Run app — تظهر البيانات فوراً من localStorage
+    // 6. Run app
     rQSB(); rUBan(); rC(); uh();
     if (localStorage.getItem('auto_bk') === '1') startAutoBk();
-
-    // ── مزامنة Supabase دورية — تعمل بصمت في الخلفية بدون تجميد الواجهة ──
-    async function _bgSync() {
-      if (!_AUTH_OK || _syncPending) return; // لا تتزامن إذا كان هناك حفظ معلّق (لتجنب التعارض)
-      try {
-        const sbRaw = await _sbGet('main_db_v1');
-        if (!sbRaw) return;
-        const parsed = JSON.parse(sbRaw);
-        if (!parsed || typeof parsed !== 'object' || !(parsed.customers || parsed.services)) return;
-
-        const localStr = JSON.stringify(db);
-        const cloudStr = JSON.stringify(parsed);
-        if (localStr === cloudStr) return; // لا فرق — لا حاجة لتحديث
-
-        db = parsed;
-        ['customers','accounts','manualDebts','cards'].forEach(k => {
-          if (!Array.isArray(db[k])) db[k] = [];
-        });
-        if (!db.prices)   db.prices   = {};
-        if (!db.settings) db.settings = {};
-        Object.keys(DS).forEach(k => { if (db.settings[k] == null) db.settings[k] = DS[k]; });
-        if (!db.settings.templates)       db.settings.templates = {...DTPL};
-        if (!Array.isArray(db.services) || !db.services.length) db.services = [...DEF_SVCS];
-        db.cards.forEach(ensureK);
-        db.customers.forEach(ensureC);
-        CUR = String(db.settings.currency || 'د.ل');
-        localStorage.setItem('subs_v5', cloudStr);
-
-        // تحديث الواجهة بالبيانات الأحدث — فقط الأقسام المرئية حالياً
-        rQSB(); rUBan(); uh();
-        const activePanel = document.querySelector('.panel.on');
-        const activeId = activePanel ? activePanel.id : '';
-        if (activeId === 'p-cust')     rC();
-        else if (activeId === 'p-accts')   rA();
-        else if (activeId === 'p-cards')   rK();
-        else if (activeId === 'p-finance') rFinance();
-        else if (activeId === 'p-alerts')  rAlerts();
-        else if (activeId === 'p-debts')   rDebts();
-        else if (activeId === 'p-prices')  rP();
-        else rC(); // افتراضي
-      } catch(e) { console.warn('Background sync failed', e); }
-    }
-
-    // فحص أولي بعد ثانية واحدة (لا يُجمّد الدخول)
-    setTimeout(_bgSync, 1000);
-    // فحص دوري كل 60 ثانية
-    const _bgSyncInterval = setInterval(_bgSync, 60 * 1000);
-    // فحص فوري عند العودة لعلامة التبويب (إذا كان المستخدم غائباً وعاد)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && _AUTH_OK) _bgSync();
-    });
-    window._bgSync = _bgSync; // متاح للاستدعاء اليدوي إذا لزم
 
     // ── INACTIVITY TIMEOUT: 30 minutes ──
     var _idleT = null;
