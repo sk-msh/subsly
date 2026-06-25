@@ -6,7 +6,8 @@
 <meta http-equiv="X-Frame-Options" content="DENY">
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%237c6aff'/%3E%3Ctext y='122' x='44' font-size='104'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;900&display=swap" media="print" onload="this.media='all'">
@@ -121,15 +122,17 @@ body > *:not(#loginOv):not(#resetOv) { display:none !important; }
 /* ═══════════════════════════════════════
    RESET & BASE
 ═══════════════════════════════════════ */
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
 html { scroll-behavior: smooth; font-size: 17.5px; }
 body {
   font-family: 'Cairo', 'Segoe UI', 'Tahoma', 'Arial', sans-serif;
   background: var(--bg);
   color: var(--tx);
   min-height: 100vh;
+  min-height: 100dvh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: contain;
   transition: background .25s ease, color .25s ease;
 }
 body::before {
@@ -262,6 +265,8 @@ header {
   margin-bottom: 1.25rem;
   border: 1px solid var(--b1);
 }
+.tab-sep { width:1px; align-self:center; height:16px; background:var(--b2); margin:0 .15rem; flex-shrink:0; }
+@media (max-width:640px){ .tab-sep { display:none; } }
 .tab {
   padding: .3rem .8rem;
   border-radius: 8px;
@@ -759,6 +764,18 @@ input[type="date"].fi { color-scheme: dark; }
   margin-bottom: .85rem;
 }
 .sti { font-size: .88rem; font-weight: 800; margin-bottom: .75rem; }
+
+/* مجموعات الإعدادات القابلة للطيّ */
+.sgroup { margin-bottom: .7rem; }
+.sgh { display:flex; align-items:center; gap:.5rem; cursor:pointer; user-select:none; padding:.7rem .9rem; background:var(--s2); border:1px solid var(--b1); border-radius:12px; font-size:.82rem; font-weight:800; }
+.sgh:hover { border-color:var(--b2); }
+.sgh .sg-ar { margin-right:auto; transition:transform .2s; font-size:.7rem; color:var(--mu); }
+.sgroup.collapsed .sgh .sg-ar { transform:rotate(-90deg); }
+.sgb { padding-top:.6rem; }
+.sgroup.collapsed .sgb { display:none; }
+.sgroup.collapsed .sgh { border-radius:12px; }
+.scard.sg-hidden { display:none !important; }
+#stSearch { margin-bottom:.7rem; }
 
 /* ═══════════════════════════════════════
    VIEW SUB
@@ -1580,6 +1597,25 @@ a:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radi
   #notif { bottom: 1.25rem; right: 1.25rem; }
 }
 
+/* ═══ الديسكتوب: شبكة لأقسام القوائم + لوحة بعمودين ═══ */
+@media (min-width: 1000px) {
+  #dl, #expList, #mysubs-list, #actList, #tplList {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+    gap: .55rem;
+    align-items: start;
+  }
+  /* العناصر التي يجب أن تمتد عبر كل الأعمدة (الفواصل والعناوين) */
+  .list-span-full { grid-column: 1 / -1; }
+  /* لوحة اليوم: المهام في عمودين */
+  #todayTasks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+    gap: .65rem;
+    align-items: start;
+  }
+}
+
 /* Mobile small (<480px) */
 @media (max-width: 480px) {
   header { height: 48px; }
@@ -1594,6 +1630,19 @@ a:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radi
   .sw { min-width: 0; }
   .ftabs { flex-wrap: wrap; }
   .confirm-box { padding: 1.2rem; }
+}
+
+/* ═══ iOS: منع التكبير عند الإدخال + أهداف لمس أكبر ═══ */
+@media (max-width: 768px) {
+  /* خط 16px يمنع تكبير Safari التلقائي عند لمس أي حقل */
+  input, select, textarea, .fi, .fs, .login-input { font-size: 16px !important; }
+  /* أهداف لمس مريحة للأزرار الرئيسية */
+  .btn { min-height: 44px; }
+  .bn  { min-height: 48px; }
+  .login-btn { min-height: 48px; }
+  /* الأزرار الصغيرة (إجراءات الصفوف): توسيع منطقة اللمس دون تضخيم بصري مفرط */
+  .btn-xs { min-height: 34px; min-width: 34px; }
+  .login-input { min-height: 46px; }
 }
 /* ═══════════════════════════════════════
    CYBERPUNK NEON SKIN — طبقة التوهّج النهائية
@@ -1698,17 +1747,20 @@ header {
 <nav class="tabs" role="tablist" aria-label="أقسام التطبيق">
   <button class="tab on" role="tab" aria-selected="true"  data-p="today"    onclick="sw('today')"   >🏠 اليوم</button>
   <button class="tab"    role="tab" aria-selected="false" data-p="cust"     onclick="sw('cust')"    >👥 الزبائن</button>
-  <button class="tab"    role="tab" aria-selected="false" data-p="accts"    onclick="sw('accts')"   >🗂️ الحسابات</button>
-  <button class="tab"    role="tab" aria-selected="false" data-p="cards"    onclick="sw('cards')"   >💳 الكروت</button>
-  <button class="tab"    role="tab" aria-selected="false" data-p="prices"   onclick="sw('prices')"  >🏷️ الأسعار</button>
   <button class="tab"    role="tab" aria-selected="false" data-p="alerts"   onclick="sw('alerts')"  >🔔 التنبيهات</button>
+  <button class="tab"    role="tab" aria-selected="false" data-p="debts"    onclick="sw('debts')"   >⚠️ الديون</button>
+  <span class="tab-sep" aria-hidden="true"></span>
+  <button class="tab"    role="tab" aria-selected="false" data-p="cards"    onclick="sw('cards')"   >💳 الكروت</button>
+  <button class="tab"    role="tab" aria-selected="false" data-p="accts"    onclick="sw('accts')"   >🗂️ الحسابات</button>
+  <button class="tab"    role="tab" aria-selected="false" data-p="prices"   onclick="sw('prices')"  >🏷️ الأسعار</button>
+  <span class="tab-sep" aria-hidden="true"></span>
   <button class="tab"    role="tab" aria-selected="false" data-p="finance"  onclick="sw('finance')" >📊 التحاليل</button>
   <button class="tab"    role="tab" aria-selected="false" data-p="monthly"  onclick="sw('monthly')" >📅 التقرير الشهري</button>
   <button class="tab"    role="tab" aria-selected="false" data-p="expenses" onclick="sw('expenses')">💸 المصاريف</button>
+  <span class="tab-sep" aria-hidden="true"></span>
+  <button class="tab"    role="tab" aria-selected="false" data-p="growth"   onclick="sw('growth')"  >🚀 النمو</button>
   <button class="tab"    role="tab" aria-selected="false" data-p="mysubs"   onclick="sw('mysubs')"  >🧾 اشتراكاتي</button>
   <button class="tab"    role="tab" aria-selected="false" data-p="activity" onclick="sw('activity')">📋 النشاط</button>
-  <button class="tab"    role="tab" aria-selected="false" data-p="debts"    onclick="sw('debts')"   >💸 الديون</button>
-  <button class="tab"    role="tab" aria-selected="false" data-p="growth"   onclick="sw('growth')"  >🚀 النمو</button>
   <button class="tab"    role="tab" aria-selected="false" data-p="settings" onclick="sw('settings')">⚙️ الإعدادات</button>
 </nav>
 
@@ -1851,6 +1903,12 @@ header {
       <button class="ft" onclick="sdf('unpaid',this)">غير مسدد</button>
       <button class="ft" onclick="sdf('paid',this)">مسدد</button>
     </div>
+    <select class="fi" style="width:auto;padding:.35rem .5rem;font-size:.68rem" id="debtSort" onchange="rDebts()" aria-label="فرز">
+      <option value="age">⏳ الأقدم أولاً</option>
+      <option value="amount">💰 الأكبر أولاً</option>
+      <option value="name">الاسم</option>
+    </select>
+    <button class="btn bg btn-sm" onclick="exportDebts()" title="تصدير CSV">📤</button>
     <button class="btn bw" onclick="openDebtM()">➕ دين يدوي</button>
   </div>
   <div id="dsummary" style="margin-bottom:.85rem"></div>
@@ -1859,6 +1917,11 @@ header {
 
 <!-- SETTINGS -->
 <div class="panel" id="p-settings">
+  <input class="fi" id="stSearch" placeholder="🔍 ابحث في الإعدادات..." oninput="filterSettings()" aria-label="بحث في الإعدادات" style="width:100%;box-sizing:border-box">
+
+  <div class="sgroup" id="sg-sec">
+    <div class="sgh" onclick="toggleSGroup('sg-sec')">🔐 الأمان والدخول <span class="sg-ar">▼</span></div>
+    <div class="sgb">
   <div class="scard">
     <div class="sti">📦 نقل بيانات الدخول إلى جهاز آخر</div>
     <div style="font-size:.72rem;color:var(--tx2);margin-bottom:.85rem;line-height:1.7">
@@ -1899,8 +1962,13 @@ header {
       <div class="fr"><label class="fl">تأكيد كلمة السر الجديدة *</label><div class="pw"><input class="fi" id="chgCnf" type="password" dir="ltr"><button class="pt" onclick="tpw('chgCnf',this)">👁️</button></div></div>
     </div>
     <button class="btn bp" onclick="changeCredentials()">🔒 تحديث بيانات الدخول</button>
-  </div>
+    </div>
+    </div>
+  </div><!-- /sg-sec -->
 
+  <div class="sgroup" id="sg-gen">
+    <div class="sgh" onclick="toggleSGroup('sg-gen')">⚙️ عام والخدمات <span class="sg-ar">▼</span></div>
+    <div class="sgb">
   <div class="scard">
     <div class="sti">🔔 الإعدادات العامة</div>
     <div class="fg2">
@@ -1936,7 +2004,12 @@ header {
       <button class="btn bg" onclick="addSv()">➕</button>
     </div>
   </div>
+    </div>
+  </div><!-- /sg-gen -->
 
+  <div class="sgroup" id="sg-notif">
+    <div class="sgh" onclick="toggleSGroup('sg-notif')">🔔 التنبيهات والبريد <span class="sg-ar">▼</span></div>
+    <div class="sgb">
   <div class="scard">
     <div class="sti">🔔 تنبيهات المتصفح (Browser Notifications)</div>
     <div style="font-size:.71rem;color:var(--tx2);margin-bottom:.75rem;line-height:1.7">
@@ -1970,7 +2043,12 @@ header {
       <button class="btn bg btn-sm" onclick="testEmailCfg()">🧪 اختبار</button>
     </div>
   </div>
+    </div>
+  </div><!-- /sg-notif -->
 
+  <div class="sgroup" id="sg-sync">
+    <div class="sgh" onclick="toggleSGroup('sg-sync')">☁️ المزامنة والنسخ والأدوات <span class="sg-ar">▼</span></div>
+    <div class="sgb">
   <div class="scard">
     <div class="sti">☁️ مزامنة Supabase</div>
     <div class="fr"><label class="fl">رابط المشروع</label><input class="fi" id="sUrl" dir="ltr"></div>
@@ -1991,6 +2069,7 @@ header {
     </label>
     <div style="font-size:.62rem;color:var(--mu);margin-bottom:.45rem">نسخة تلقائية للسحابة مرة كل ٢٤ ساعة، مع تأكيد نجاحها وتنبيه فوري لو فشلت.</div>
     <div id="cloudBkSt" style="font-size:.7rem;color:var(--mu);padding:.45rem .65rem;background:var(--s2);border-radius:8px;border:1px solid var(--b1)">⚪ النسخ السحابي اليومي متوقف</div>
+  </div><!-- /scard Supabase : إغلاق مفقود -->
 
   <div class="scard">
     <div class="sti">⌨️ اختصارات لوحة المفاتيح</div>
@@ -2034,9 +2113,25 @@ header {
     </label>
     <div id="bkSt" style="font-size:.7rem;color:var(--mu);padding:.45rem .65rem;background:var(--s2);border-radius:8px;border:1px solid var(--b1)">⚪ متوقف</div>
   </div>
-</div>
 
-</div><!-- /p-settings : إغلاق مفقود تسبّب في ابتلاع الأقسام التالية -->
+  <div class="scard">
+    <div class="sti">🎨 المظهر والإصدار</div>
+    <div class="fr"><label class="fl">اللون الأساسي</label>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+        <input type="color" id="accentColor" value="#7c6aff" onchange="applyAccent(this.value)" style="width:42px;height:34px;padding:2px;cursor:pointer;border-radius:6px;border:1px solid var(--b2);background:var(--s2)">
+        <button class="btn bg btn-sm" onclick="applyAccent('#7c6aff')">↩️ الافتراضي</button>
+        <span style="font-size:.62rem;color:var(--mu)">يُطبَّق فوراً ويُحفظ</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;font-size:.72rem;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--b1)">
+      <span style="color:var(--tx2)">الإصدار</span>
+      <span style="font-family:monospace;background:var(--s2);border:1px solid var(--b2);border-radius:5px;padding:.12rem .45rem;font-size:.68rem;font-weight:700">Subsly v1.0</span>
+    </div>
+  </div>
+    </div>
+  </div><!-- /sg-sync -->
+
+</div><!-- /p-settings -->
 
 <!-- EXPENSES -->
 <!-- EXPENSES (rebuilt) -->
@@ -2539,8 +2634,13 @@ header {
     <div class="login-field" style="margin-bottom:.9rem">
       <label class="login-label">كلمة السر</label>
       <div class="login-pw-wrap">
-        <input id="lgPass" type="password" autocomplete="current-password" class="login-input" placeholder="أدخل كلمة السر" onkeydown="if(event.key==='Enter')doLogin()">
+        <input id="lgPass" type="password" autocomplete="current-password" class="login-input" placeholder="أدخل كلمة السر" oninput="_lgPwMeter()" onkeyup="_lgCaps(event)" onkeydown="if(event.key==='Enter')doLogin();_lgCaps(event)">
         <button onclick="toggleLgPw()" class="login-pw-eye" id="lgEye">👁️</button>
+      </div>
+      <div id="lgCaps" style="display:none;font-size:.62rem;color:var(--wa);margin-top:.3rem">⚠️ مفتاح Caps Lock مفعّل</div>
+      <div id="lgStrength" style="display:none;margin-top:.4rem">
+        <div style="height:4px;background:var(--b1);border-radius:4px;overflow:hidden"><div id="lgStrengthBar" style="height:100%;width:0;transition:all .2s"></div></div>
+        <div id="lgStrengthTxt" style="font-size:.6rem;margin-top:.2rem;color:var(--mu)"></div>
       </div>
     </div>
     <button onclick="doLogin()" id="lgBtn" class="login-btn">تسجيل الدخول</button>
@@ -2783,6 +2883,14 @@ const esc = s => String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 const safe = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 // san() — HTML entity encode for rendering untrusted data safely
+// تنظيف مُدخلات المستخدم عند الحفظ: يزيل أحرف حقن الوسوم (< >) ويحدّ الطول
+// فتُصبح كل مواضع العرض (innerHTML) آمنة من XSS المخزّن تلقائياً
+function _clean(s, max){
+  if (s == null) return '';
+  let str = String(s).replace(/[<>]/g, '');
+  if (max && str.length > max) str = str.slice(0, max);
+  return str;
+}
 function san(s) {
   if (s == null) return '';
   let o = '', str = String(s);
@@ -2972,18 +3080,19 @@ function buildSalesLog() {
 
 const allDebtRows = () => {
   const rows=[]; const seen=new Set();
+  const _mk = (o) => { o.paidAmount = n2(o.paidAmount); o.remaining = Math.max(0, n2(o.amt) - o.paidAmount); if(!o.paid && o.paidAmount>0 && o.remaining<=0.001) o.paid=true; return o; };
   db.customers.forEach(c=>{
     (c.subscriptions||[]).forEach(s=>{
-      if(s.isCardGroup){ if(s.isDebt&&!s.debtPaid) rows.push({kind:'cg',sub:s,name:c.name,phone:c.phone||'',cid:c.id,amt:n2(s.debtAmount),srv:s.service||'',note:'كروت '+s.service,date:s.debtCreatedAt||'',paid:false,createdAt:s.debtCreatedAt||''}); }
-      else if(s.isDebt) rows.push({kind:'sub',sub:s,name:c.name,phone:c.phone||'',cid:c.id,amt:subDV(s),srv:s.service||'',note:'اشتراك '+(s.service||''),date:s.start||'',paid:!!s.debtPaid,createdAt:s.debtCreatedAt||s.start||''});
+      if(s.isCardGroup){ if(s.isDebt&&!s.debtPaid) rows.push(_mk({kind:'cg',sub:s,name:c.name,phone:c.phone||'',cid:c.id,amt:n2(s.debtAmount),paidAmount:n2(s.debtPaidAmount),srv:s.service||'',note:'كروت '+s.service,date:s.debtCreatedAt||'',paid:false,createdAt:s.debtCreatedAt||''})); }
+      else if(s.isDebt) rows.push(_mk({kind:'sub',sub:s,name:c.name,phone:c.phone||'',cid:c.id,amt:subDV(s),paidAmount:n2(s.debtPaidAmount),srv:s.service||'',note:'اشتراك '+(s.service||''),date:s.start||'',paid:!!s.debtPaid,createdAt:s.debtCreatedAt||s.start||''}));
     });
     db.manualDebts.filter(d=>d.customerId===c.id).forEach(d=>{
       seen.add(d.id);
-      rows.push({kind:'man',debt:d,name:c.name,phone:c.phone||'',cid:c.id,amt:n2(d.amount),srv:d.service||'',note:d.note||'دين',date:d.date||'',paid:!!d.paid,createdAt:d.createdAt||d.date||''});
+      rows.push(_mk({kind:'man',debt:d,name:c.name,phone:c.phone||'',cid:c.id,amt:n2(d.amount),paidAmount:n2(d.paidAmount),srv:d.service||'',note:d.note||'دين',date:d.date||'',paid:!!d.paid,createdAt:d.createdAt||d.date||''}));
     });
   });
   db.manualDebts.filter(d=>!seen.has(d.id)).forEach(d=>{
-    rows.push({kind:'man',debt:d,name:'زبون محذوف',phone:'',cid:d.customerId,amt:n2(d.amount),srv:d.service||'',note:d.note||'دين',date:d.date||'',paid:!!d.paid,createdAt:d.createdAt||d.date||''});
+    rows.push(_mk({kind:'man',debt:d,name:'زبون محذوف',phone:'',cid:d.customerId,amt:n2(d.amount),paidAmount:n2(d.paidAmount),srv:d.service||'',note:d.note||'دين',date:d.date||'',paid:!!d.paid,createdAt:d.createdAt||d.date||''}));
   });
   // غير المسدد أولاً، ثم الأحدث إضافةً في الأعلى (الأقدم في الأسفل)
   return rows.sort((a,b)=>{
@@ -3080,6 +3189,44 @@ function _xorDec(b64, key) {
   } catch(e) { return null; }
 }
 
+// ── AES-GCM at-rest encryption (تشفير حقيقي للبيانات في الراحة) ──
+// المفتاح مشتق من كلمة السر (256-bit hex في _EK) — لا يُخزَّن أبداً
+function _hexToBytes(hex){ const a=new Uint8Array(hex.length/2); for(let i=0;i<a.length;i++) a[i]=parseInt(hex.substr(i*2,2),16); return a; }
+function _b64enc(bytes){ let s=''; for(let i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]); return btoa(s); }
+function _b64dec(b64){ const bin=atob(b64); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a; }
+async function _aesEnc(plain, keyHex){
+  const kb=_hexToBytes(keyHex).slice(0,32);
+  const key=await crypto.subtle.importKey('raw',kb,'AES-GCM',false,['encrypt']);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(plain));
+  const c=new Uint8Array(iv.length+ct.byteLength); c.set(iv); c.set(new Uint8Array(ct),iv.length);
+  return 'ENC1:'+_b64enc(c);
+}
+async function _aesDec(enc, keyHex){
+  const c=_b64dec(enc.slice(5)); const iv=c.slice(0,12), ct=c.slice(12);
+  const kb=_hexToBytes(keyHex).slice(0,32);
+  const key=await crypto.subtle.importKey('raw',kb,'AES-GCM',false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+  return new TextDecoder().decode(pt);
+}
+// حفظ مشفّر مع شبكة أمان: نسخة احتياطية صريحة لمرة واحدة قبل أول كتابة مشفّرة، وتراجع آمن عند أي خطأ
+async function _persistDB(json){
+  try{
+    if(_EK){
+      const cur = localStorage.getItem('subs_v5');
+      if(cur && cur.startsWith('{') && !localStorage.getItem('subs_v5_premig'))
+        localStorage.setItem('subs_v5_premig', cur); // نسخة استرجاع لمرة واحدة أثناء الترحيل
+      const enc = await _aesEnc(json, _EK);
+      localStorage.setItem('subs_v5', enc);
+    } else {
+      localStorage.setItem('subs_v5', json);
+    }
+  }catch(e){
+    try{ localStorage.setItem('subs_v5', json); }  // لا نفقد البيانات أبداً: تراجع للصريح
+    catch(e2){ notify('\u26A0\uFE0F \u0641\u0636\u0627\u0621 \u0627\u0644\u062A\u062E\u0632\u064A\u0646 \u0645\u0645\u062A\u0644\u0626','er'); }
+  }
+}
+
 // ── مؤشر حالة الحفظ السحابي ──
 let _syncTimer = null;
 let _syncPending = false;
@@ -3130,10 +3277,8 @@ function save() {
   if (!_AUTH_OK) return;
   _dataVer++; // إبطال كاش قسم اليوم عند أي تغيير
   db.settings.currency = CUR;
-  // حفظ محلي فوري — plain JSON (no XOR — was causing data loss across file edits)
-  try {
-    localStorage.setItem('subs_v5', JSON.stringify(db));
-  } catch(e) { notify('\u26A0\uFE0F \u0641\u0636\u0627\u0621 \u0627\u0644\u062A\u062E\u0632\u064A\u0646 \u0645\u0645\u062A\u0644\u0626','er'); }
+  // حفظ محلي مشفّر (AES-GCM) — الذاكرة محدّثة فوراً، التشفير غير المتزامن لا يجمّد الواجهة
+  _persistDB(JSON.stringify(db));
   // رفع سحابي فوري مع debounce 800ms
   _syncPending = true;
   clearTimeout(_syncTimer);
@@ -4242,17 +4387,17 @@ function onPrC(el){const e=el.closest('.sent'),cb=e.querySelector('.se-idt'),da=
 function onDT(cb){const e=cb.closest('.sent'),w=e.querySelector('.se-dw'),da=e.querySelector('.se-da');if(w)w.style.display=cb.checked?'block':'none';if(cb.checked&&da&&da.value===''){const pr=e.querySelector('.se-pr');if(pr)da.value=pr.value;}}
 
 function saveCust(){
-  const name=(document.getElementById('fN').value||'').trim(); if(!name){notify('⚠️ أدخل الاسم','wa');return;}
-  const phone=(document.getElementById('fP').value||'').trim();
-  const notes=(document.getElementById('fNt').value||'').trim();
+  const name=_clean((document.getElementById('fN').value||'').trim(),80); if(!name){notify('⚠️ أدخل الاسم','wa');return;}
+  const phone=_clean((document.getElementById('fP').value||'').trim(),30);
+  const notes=_clean((document.getElementById('fNt').value||'').trim(),500);
   const source=(document.getElementById('fSrc')||{}).value||'';
-  const referredBy=((document.getElementById('fRef')||{}).value||'').trim();
-  const delivery={locationLink:(document.getElementById('fLL').value||'').trim(),address:(document.getElementById('fAdr').value||'').trim(),agentPhone:(document.getElementById('fAP').value||'').trim()};
+  const referredBy=_clean(((document.getElementById('fRef')||{}).value||'').trim(),80);
+  const delivery={locationLink:_clean((document.getElementById('fLL').value||'').trim(),300),address:_clean((document.getElementById('fAdr').value||'').trim(),200),agentPhone:_clean((document.getElementById('fAP').value||'').trim(),30)};
   const newSubs=[];
   document.querySelectorAll('#sents .sent').forEach(e=>{
-    const service=(e.querySelector('.se-srv').value||'').trim(); if(!service) return;
+    const service=_clean((e.querySelector('.se-srv').value||'').trim(),60); if(!service) return;
     const aid=e.querySelector('.se-aid').value||'';
-    const account=e.querySelector('.se-em').value.trim(),password=e.querySelector('.se-pw').value;
+    const account=_clean(e.querySelector('.se-em').value.trim(),120),password=_clean(e.querySelector('.se-pw').value,120);
     if(aid){const a=gAcct(aid);if(a){if(account&&account!==a.email)a.email=account;if(password&&password!==a.password)a.password=password;}}
     const expiry=getDV(e.querySelector('.se-exp')),start=getDV(e.querySelector('.se-start'));
     const mRaw=e.querySelector('.se-m').value;const months=(mRaw!==''&&!isNaN(parseInt(mRaw)))?parseInt(mRaw):'';
@@ -4475,14 +4620,14 @@ function openAcctM(id=null,preS=null){
   om('mAcct');
 }
 function saveAcct(){
-  const service=(document.getElementById('aSrv').value||'').trim();
-  const email=(document.getElementById('aEmail').value||'').trim();
+  const service=_clean((document.getElementById('aSrv').value||'').trim(),60);
+  const email=_clean((document.getElementById('aEmail').value||'').trim(),120);
   if(!service){notify('⚠️ اختر الخدمة','wa');return;}
   if(!email){notify('⚠️ أدخل الإيميل','wa');return;}
   const password=document.getElementById('aPwd').value;
   const slotsR=document.getElementById('aSlots').value;
   const slots=(slotsR&&!isNaN(parseInt(slotsR)))?parseInt(slotsR):'';
-  const note=(document.getElementById('aNote').value||'').trim();
+  const note=_clean((document.getElementById('aNote').value||'').trim(),300);
   const nextPaymentDate=getDV(document.getElementById('aNext'));
   const rcRaw=document.getElementById('aRenewCost').value;
   const renewCost=(rcRaw!==''&&!isNaN(parseFloat(rcRaw)))?parseFloat(rcRaw):'';
@@ -6378,7 +6523,7 @@ function openDebtM(did=null,preCid=null){
 function saveDebt(){
   const cid=document.getElementById('dCust').value,amt=parseFloat(document.getElementById('dAmt').value);
   if(!cid){notify('⚠️ اختر الزبون','wa');return;}if(isNaN(amt)||amt<0){notify('⚠️ أدخل مبلغاً صحيحاً','wa');return;}
-  const srv=document.getElementById('dSrv').value,note=(document.getElementById('dNote').value||'').trim(),date=getDV(document.getElementById('dDate'));
+  const srv=_clean(document.getElementById('dSrv').value,60),note=_clean((document.getElementById('dNote').value||'').trim(),300),date=getDV(document.getElementById('dDate'));
   if(eDId){const i=db.manualDebts.findIndex(d=>d.id===eDId);if(i>-1)db.manualDebts[i]={...db.manualDebts[i],customerId:cid,amount:amt,service:srv,note,date};notify('✅ تم التحديث');}
   else{db.manualDebts.push({id:uid(),customerId:cid,amount:amt,service:srv,note,date,paid:false,createdAt:new Date().toISOString()});notify('✅ تم التسجيل');}
   save();cm('mDebt');rDebts();rC();
@@ -6388,23 +6533,46 @@ const _debtExpanded = new Set();
 
 function rDebts(){
   const q=((document.getElementById('dsi')||{}).value||'').trim();
+  const sortMode=((document.getElementById('debtSort')||{}).value)||'age';
+  const _ageDays = r => { const base=r.createdAt||r.date; if(!base) return null; return Math.floor((Date.now()-new Date(base))/86400000); };
   let rows=allDebtRows();
   if(debtFilt==='unpaid') rows=rows.filter(r=>!r.paid);
   else if(debtFilt==='paid') rows=rows.filter(r=>r.paid);
   if(q) rows=rows.filter(r=>smartMatch(r.name,q)||(r.phone||'').includes(q.replace(/\D/g,''))||smartMatch(r.note,q)||smartMatch(r.srv,q));
 
   const allR=allDebtRows();
-  const tu=allR.filter(r=>!r.paid).reduce((a,r)=>a+n2(r.amt),0);
+  const unpaidR=allR.filter(r=>!r.paid);
+  const tu=unpaidR.reduce((a,r)=>a+n2(r.remaining),0);
+
+  // محصّل هذا الشهر (ديون يدوية سُدّدت هذا الشهر)
+  const _ym=new Date().toISOString().slice(0,7);
+  const collectedThis=(db.manualDebts||[]).filter(d=>d.paid&&(d.paidAt||'').slice(0,7)===_ym).reduce((a,d)=>a+n2(d.amount),0);
+
+  // توزيع الأعمار
+  const buckets={a:0,b:0,c:0}; // 0-30, 30-60, 60+
+  unpaidR.forEach(r=>{ const ag=_ageDays(r); if(ag===null) return; if(ag<=30) buckets.a+=n2(r.remaining); else if(ag<=60) buckets.b+=n2(r.remaining); else buckets.c+=n2(r.remaining); });
+
+  // أكبر مَدين
+  const byCust={}; unpaidR.forEach(r=>{ byCust[r.cid]=byCust[r.cid]||{name:r.name,sum:0}; byCust[r.cid].sum+=n2(r.remaining); });
+  const topDebtor=Object.values(byCust).sort((a,b)=>b.sum-a.sum)[0];
+
   const su=document.getElementById('dsummary');
   if(allR.length){
-    su.innerHTML=`<div style="background:rgba(255,61,128,.06);border:1px solid rgba(255,61,128,.25);border-radius:12px;padding:.85rem 1.1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+    su.innerHTML=`<div style="background:rgba(255,61,128,.06);border:1px solid rgba(255,61,128,.25);border-radius:12px;padding:.85rem 1.1rem;margin-bottom:.5rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
       <div style="font-size:1.5rem">⚠️</div>
       <div style="flex:1">
         <div style="font-size:.62rem;color:var(--mu);margin-bottom:.18rem;text-transform:uppercase;letter-spacing:.03em">إجمالي الديون غير المسددة</div>
         <div style="font-size:1.45rem;font-weight:900;color:var(--er)">${tu.toFixed(2)} ${CUR}</div>
-        <div style="font-size:.6rem;color:var(--mu);margin-top:.1rem">${allR.filter(r=>!r.paid).length} دين معلّق • ${[...new Set(allR.filter(r=>!r.paid).map(r=>r.cid))].length} زبون</div>
+        <div style="font-size:.6rem;color:var(--mu);margin-top:.1rem">${unpaidR.length} دين معلّق • ${[...new Set(unpaidR.map(r=>r.cid))].length} زبون</div>
       </div>
-    </div>`;
+      ${collectedThis>0?`<div style="text-align:left"><div style="font-size:.95rem;font-weight:900;color:var(--ok)" dir="rtl">${collectedThis.toFixed(0)} ${CUR}</div><div style="font-size:.55rem;color:var(--mu)">محصّل هذا الشهر</div></div>`:''}
+    </div>
+    ${tu>0?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;margin-bottom:.5rem">
+      <div style="background:rgba(0,200,150,.07);border:1px solid rgba(0,200,150,.18);border-radius:9px;padding:.45rem;text-align:center"><div style="font-size:.52rem;color:var(--mu)">حديث (≤30ي)</div><div style="font-size:.78rem;font-weight:900;color:var(--ok)" dir="rtl">${buckets.a.toFixed(0)}</div></div>
+      <div style="background:rgba(255,184,48,.07);border:1px solid rgba(255,184,48,.18);border-radius:9px;padding:.45rem;text-align:center"><div style="font-size:.52rem;color:var(--mu)">متأخر (30-60ي)</div><div style="font-size:.78rem;font-weight:900;color:var(--wa)" dir="rtl">${buckets.b.toFixed(0)}</div></div>
+      <div style="background:rgba(255,61,128,.07);border:1px solid rgba(255,61,128,.18);border-radius:9px;padding:.45rem;text-align:center"><div style="font-size:.52rem;color:var(--mu)">قديم (&gt;60ي)</div><div style="font-size:.78rem;font-weight:900;color:var(--er)" dir="rtl">${buckets.c.toFixed(0)}</div></div>
+    </div>`:''}
+    ${topDebtor&&topDebtor.sum>0?`<div style="font-size:.6rem;color:var(--mu);margin-bottom:.5rem;padding-right:.2rem">👑 أكبر مَدين: <span style="color:var(--er);font-weight:700">${esc(topDebtor.name)}</span> (${topDebtor.sum.toFixed(0)} ${CUR})</div>`:''}`;
   } else su.innerHTML='';
 
   const el=document.getElementById('dl');
@@ -6420,7 +6588,14 @@ function rDebts(){
     groups.get(r.cid).rows.push(r);
   });
 
-  el.innerHTML = [...groups.values()].map(g => {
+  // ── فرز المجموعات ──
+  let gArr=[...groups.values()];
+  gArr.forEach(g=>{ g._unpaid=g.rows.filter(r=>!r.paid).reduce((a,r)=>a+n2(r.remaining),0); g._oldest=Math.max(...g.rows.map(r=>{const b=r.createdAt||r.date;return b?Math.floor((Date.now()-new Date(b))/86400000):0;}),0); });
+  if(sortMode==='amount') gArr.sort((a,b)=>b._unpaid-a._unpaid);
+  else if(sortMode==='name') gArr.sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
+  else gArr.sort((a,b)=>{ const pa=a._unpaid>0?0:1, pb=b._unpaid>0?0:1; if(pa!==pb)return pa-pb; return b._oldest-a._oldest; });
+
+  el.innerHTML = gArr.map(g => {
     const ini = g.name.trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
     const total    = g.rows.reduce((a,r)=>a+n2(r.amt),0);
     const unpaid   = g.rows.filter(r=>!r.paid).reduce((a,r)=>a+n2(r.amt),0);
@@ -6433,13 +6608,24 @@ function rDebts(){
 
     // ── Row detail builder ──
     const detailRows = g.rows.map(r => {
-      let pay='', edit='', del='';
+      let pay='', edit='', del='', partial='';
       const kt = r.kind==='cg'?'💳':r.kind==='sub'?'📦':'📝';
       const ktLabel = r.kind==='cg'?'كروت':r.kind==='sub'?'اشتراك':'يدوي';
+      const ageBase = r.createdAt||r.date;
+      const ageDays = ageBase ? Math.floor((Date.now()-new Date(ageBase))/86400000) : null;
+      const ageTag = (!r.paid && ageDays!==null) ? `<span style="font-size:.54rem;font-weight:700;padding:.02rem .32rem;border-radius:20px;background:${ageDays>60?'rgba(255,61,128,.15)':ageDays>30?'rgba(255,184,48,.15)':'rgba(120,120,140,.12)'};color:${ageDays>60?'var(--er)':ageDays>30?'var(--wa)':'var(--mu)'}">${ageDays>60?'🔴 ':ageDays>30?'🟡 ':''}منذ ${ageDays}ي</span>` : '';
+      const hasPartial = !r.paid && n2(r.paidAmount)>0;
+      const _oid = r.kind==='man'?r.debt.id:r.sub.id;
+      const _isDepEdit = _depEdit && _depEdit.oid===_oid && _depEdit.kind===r.kind && _depEdit.cid===r.cid;
       if(!r.paid){
         if(r.kind==='cg')   pay=`<button class="btn bs btn-xs" onclick="event.stopPropagation();payCG('${r.cid}','${r.sub.id}')">✓ سداد</button>`;
         else if(r.kind==='sub') pay=`<button class="btn bs btn-xs" onclick="event.stopPropagation();paySD('${r.cid}','${r.sub.id}')">✓ سداد</button>`;
         else pay=`<button class="btn bs btn-xs" onclick="event.stopPropagation();payMD('${r.debt.id}')">✓ سداد</button>`;
+        if(_isDepEdit){
+          partial=`<input class="dep-inp" type="number" min="0" max="${n2(r.amt)}" step="0.01" dir="ltr" value="${n2(r.paidAmount)>0?n2(r.paidAmount):''}" placeholder="عربون" onclick="event.stopPropagation()" onkeydown="event.stopPropagation();if(event.key==='Enter')this.blur();if(event.key==='Escape'){_depEdit=null;rDebts();}" onblur="commitDep(this,'${r.kind}','${r.cid}','${_oid}')" style="width:74px;padding:.22rem .3rem;font-size:.72rem;background:var(--s1);border:1px solid var(--ac);border-radius:6px;color:var(--tx);font-family:Cairo,sans-serif">`;
+        } else {
+          partial=`<button class="btn bg btn-xs" title="عربون / دفعة جزئية" onclick="event.stopPropagation();startDep('${r.kind}','${r.cid}','${_oid}')">💰 عربون${n2(r.paidAmount)>0?' ✎':''}</button>`;
+        }
       }
       if(r.kind==='man'){
         edit=`<button class="btn bg btn-xs" onclick="event.stopPropagation();openDebtM('${r.debt.id}')">✏️</button>`;
@@ -6450,14 +6636,14 @@ function rDebts(){
       return `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;background:${r.paid?'rgba(0,200,150,.04)':'rgba(255,61,128,.04)'};border-radius:8px;border:1px solid ${r.paid?'rgba(0,200,150,.15)':'rgba(255,61,128,.15)'}">
         <span style="font-size:.72rem;flex-shrink:0">${kt}</span>
         <div style="flex:1;min-width:0">
-          <div style="font-size:.75rem;font-weight:700;color:var(--tx)">${r.srv||ktLabel}</div>
-          <div style="font-size:.62rem;color:var(--mu);margin-top:1px">${r.note}${r.date?' • <span dir="ltr">'+toDMY(r.date)+'</span>':''}</div>
+          <div style="font-size:.75rem;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">${r.srv||ktLabel} ${ageTag}</div>
+          <div style="font-size:.62rem;color:var(--mu);margin-top:1px">${r.note}${r.date?' • <span dir="ltr">'+toDMY(r.date)+'</span>':''}${hasPartial?` • <span style="color:var(--wa)">دُفع ${n2(r.paidAmount).toFixed(0)}</span>`:''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:.3rem;flex-shrink:0">
-          <span style="font-size:.82rem;font-weight:900;color:${r.paid?'var(--ok)':'var(--er)'}${r.paid?';text-decoration:line-through;opacity:.7':''}">${(r.amt||0).toFixed(2)} ${CUR}</span>
+          <span style="font-size:.82rem;font-weight:900;color:${r.paid?'var(--ok)':'var(--er)'}${r.paid?';text-decoration:line-through;opacity:.7':''}">${(r.paid?n2(r.amt):n2(r.remaining)).toFixed(2)} ${CUR}</span>
           ${r.paid?`<span style="font-size:.56rem;background:rgba(0,200,150,.12);color:var(--ok);border:1px solid rgba(0,200,150,.2);padding:.03rem .3rem;border-radius:20px">✓ مسدد</span>`:''}
         </div>
-        <div style="display:flex;gap:.22rem;flex-shrink:0">${pay}${edit}${del}</div>
+        <div style="display:flex;gap:.22rem;flex-shrink:0">${pay}${partial}${edit}${del}</div>
       </div>`;
     }).join('');
 
@@ -6526,9 +6712,132 @@ function delMD(id){showConfirm({icon:'🗑️',title:'حذف الدين',msg:'ه
   });
 }});}
 
+// ════════ السداد الجزئي ════════
+// ════════ العربون (دفعة جزئية بتحرير مباشر) ════════
+let _depEdit = null; // {kind, cid, oid}
+function startDep(kind,cid,oid){
+  _depEdit = {kind, cid, oid};
+  rDebts();
+  setTimeout(()=>{ const i=document.querySelector('.dep-inp'); if(i){ i.focus(); i.select(); } }, 30);
+}
+function commitDep(inp, kind, cid, oid){
+  const raw = (inp.value||'').trim();
+  _depEdit = null;
+  if(raw==='') { saveDeposit(kind,cid,oid,0); return; } // مسح العربون
+  const v = parseFloat(raw);
+  if(isNaN(v) || v<0) { rDebts(); return; }
+  saveDeposit(kind,cid,oid,v);
+}
+function saveDeposit(kind,cid,oid,amount){
+  amount = Math.max(0, amount);
+  let obj, total=0, cn='';
+  if(kind==='man'){
+    obj = (db.manualDebts||[]).find(x=>x.id===oid); if(!obj) return;
+    total = n2(obj.amount); amount = Math.min(amount, total);
+    obj.paidAmount = amount;
+    cn = (db.customers.find(c=>c.id===obj.customerId)||{}).name||'';
+    if(amount>=total-0.001){ obj.paid=true; obj.paidAt=new Date().toISOString(); }
+    else { obj.paid=false; delete obj.paidAt; }
+  } else {
+    const c = db.customers.find(x=>x.id===cid);
+    obj = c && (c.subscriptions||[]).find(x=>x.id===oid); if(!obj) return;
+    cn = c.name;
+    total = kind==='cg' ? n2(obj.debtAmount) : subDV(obj);
+    amount = Math.min(amount, total);
+    obj.debtPaidAmount = amount;
+    if(amount>=total-0.001){ obj.debtPaid=true; obj.debtPaidAt=new Date().toISOString(); }
+    else { obj.debtPaid=false; delete obj.debtPaidAt; }
+  }
+  if(amount>0) _log('pay_debt','💰 عربون: '+cn+' '+amount.toFixed(0)+' '+CUR);
+  save(); rDebts(); rC();
+  notify(amount>0 ? '💰 تم حفظ العربون: '+amount.toFixed(0)+' '+CUR : '↩️ تم مسح العربون');
+}
+window.startDep=startDep; window.commitDep=commitDep; window.saveDeposit=saveDeposit;
+
+function openPartialPay(kind,cid,oid){
+  // إيجاد الكائن والمبلغ الكلي والمتبقّي
+  let total=0, paidA=0, label='';
+  if(kind==='man'){ const d=db.manualDebts.find(x=>x.id===oid); if(!d) return; total=n2(d.amount); paidA=n2(d.paidAmount); label=d.service||d.note||'دين يدوي'; }
+  else { const c=db.customers.find(x=>x.id===cid); const s=c&&(c.subscriptions||[]).find(x=>x.id===oid); if(!s) return; total=kind==='cg'?n2(s.debtAmount):subDV(s); paidA=n2(s.debtPaidAmount); label=s.service||'اشتراك'; }
+  const remaining=Math.max(0,total-paidA);
+  const html=`<div class="ov on" id="mPartial" onclick="if(event.target===this)closePartial()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="mt">➗ دفعة جزئية — ${esc(label)}</div>
+      <div style="font-size:.7rem;color:var(--mu);margin-bottom:.2rem">الإجمالي: <b>${total.toFixed(2)} ${CUR}</b>${paidA>0?` • مدفوع: <b style="color:var(--wa)">${paidA.toFixed(2)}</b>`:''}</div>
+      <div style="font-size:.8rem;color:var(--er);font-weight:800;margin-bottom:.7rem">المتبقّي: ${remaining.toFixed(2)} ${CUR}</div>
+      <label class="fl">مبلغ الدفعة</label>
+      <input id="partialAmt" type="number" min="0" max="${remaining}" step="0.01" dir="ltr" placeholder="0" style="width:100%;box-sizing:border-box;background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:.55rem;color:var(--tx);font-family:Cairo,sans-serif;font-size:.85rem;margin-bottom:.7rem">
+      <div style="display:flex;gap:.5rem">
+        <button class="btn bp" style="flex:1" onclick="savePartial('${kind}','${cid}','${oid}',${remaining})">💾 تسجيل الدفعة</button>
+        <button class="btn bg" onclick="closePartial()">إلغاء</button>
+      </div>
+    </div></div>`;
+  const wrap=document.createElement('div'); wrap.id='partialWrap'; wrap.innerHTML=html;
+  document.body.appendChild(wrap);
+  setTimeout(()=>{const i=document.getElementById('partialAmt');if(i)i.focus();},50);
+}
+function closePartial(){ const w=document.getElementById('partialWrap'); if(w) w.remove(); }
+function savePartial(kind,cid,oid,remaining){
+  const amt=parseFloat((document.getElementById('partialAmt')||{}).value);
+  if(isNaN(amt)||amt<=0){ notify('⚠️ أدخل مبلغاً صحيحاً','wa'); return; }
+  if(amt>remaining+0.001){ notify('⚠️ المبلغ أكبر من المتبقّي','wa'); return; }
+  let obj=null, total=0, cn='';
+  if(kind==='man'){ obj=db.manualDebts.find(x=>x.id===oid); if(!obj)return; total=n2(obj.amount); obj.paidAmount=n2(obj.paidAmount)+amt; cn=(db.customers.find(x=>x.id===obj.customerId)||{}).name||''; if(obj.paidAmount>=total-0.001){obj.paid=true;obj.paidAt=new Date().toISOString();} }
+  else { const c=db.customers.find(x=>x.id===cid); obj=c&&(c.subscriptions||[]).find(x=>x.id===oid); if(!obj)return; cn=c.name; total=kind==='cg'?n2(obj.debtAmount):subDV(obj); obj.debtPaidAmount=n2(obj.debtPaidAmount)+amt; if(obj.debtPaidAmount>=total-0.001){obj.debtPaid=true;obj.debtPaidAt=new Date().toISOString();} }
+  _log('pay_debt','➗ دفعة جزئية: '+cn+' '+amt.toFixed(0)+' '+CUR);
+  save(); closePartial(); rDebts(); rC();
+  notify('✅ تم تسجيل دفعة '+amt.toFixed(0)+' '+CUR);
+}
+window.openPartialPay=openPartialPay; window.closePartial=closePartial; window.savePartial=savePartial;
+
+// ════════ تصدير الديون CSV ════════
+function exportDebts(){
+  const rows=allDebtRows();
+  if(!rows.length){ notify('لا ديون للتصدير','wa'); return; }
+  const out=[['الزبون','الهاتف','النوع','الخدمة/الملاحظة','المبلغ','مدفوع','المتبقّي','الحالة','العمر (يوم)','التاريخ']];
+  rows.forEach(r=>{
+    const age = (r.createdAt||r.date)?Math.floor((Date.now()-new Date(r.createdAt||r.date))/86400000):'';
+    const kt = r.kind==='cg'?'كروت':r.kind==='sub'?'اشتراك':'يدوي';
+    out.push([r.name, r.phone||'', kt, r.srv||r.note||'', n2(r.amt).toFixed(2), n2(r.paidAmount).toFixed(2), n2(r.remaining).toFixed(2), r.paid?'مسدد':'غير مسدد', age, r.date||r.createdAt||'']);
+  });
+  const csv='\uFEFF'+out.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='debts_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  notify('📤 تم تصدير الديون');
+}
+window.exportDebts=exportDebts;
+
 // ══════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════
+function toggleSGroup(id){ const g=document.getElementById(id); if(g) g.classList.toggle('collapsed'); }
+function filterSettings(){
+  const q=((document.getElementById('stSearch')||{}).value||'').trim().toLowerCase();
+  document.querySelectorAll('#p-settings .sgroup').forEach(g=>{
+    let any=false;
+    g.querySelectorAll('.scard').forEach(c=>{
+      const txt=(c.textContent||'').toLowerCase();
+      const match=!q || txt.includes(q);
+      c.classList.toggle('sg-hidden', !match);
+      if(match) any=true;
+    });
+    g.style.display = any?'':'none';
+    if(q && any) g.classList.remove('collapsed'); // افتح المجموعات التي بها نتيجة
+  });
+}
+function applyAccent(color){
+  try{
+    document.documentElement.style.setProperty('--ac', color);
+    document.documentElement.style.setProperty('--ach', color);
+    if(!db.settings) db.settings={};
+    db.settings.accentColor=color; save();
+    const inp=document.getElementById('accentColor'); if(inp) inp.value=color;
+    notify('🎨 تم تطبيق اللون');
+  }catch(e){}
+}
+function _applyStoredAccent(){ const c=(db.settings||{}).accentColor; if(c){ document.documentElement.style.setProperty('--ac',c); document.documentElement.style.setProperty('--ach',c); } }
+window.toggleSGroup=toggleSGroup; window.filterSettings=filterSettings; window.applyAccent=applyAccent;
+
 function rSettings(){
   document.getElementById('stAD').value=db.settings.alertDays||3;
   document.getElementById('stCUR').value=db.settings.currency||'د.ل';
@@ -6540,7 +6849,19 @@ function rSettings(){
   document.getElementById('stAAD').value=(db.settings.alertAcctDays!=null?db.settings.alertAcctDays:5);
   document.getElementById('tplR').value=db.settings.templates.renew||DTPL.renew;
   document.getElementById('tplD').value=db.settings.templates.debt||DTPL.debt;
+  const _ac=document.getElementById('accentColor'); if(_ac) _ac.value=db.settings.accentColor||'#7c6aff';
   rSvList();rSyncUI();rBkUI();rEmailCfgUI();updatePushStatus();rStorageMeter();
+  _wireGenDirty();
+}
+// مؤشّر «تغييرات غير محفوظة» لبطاقة الإعدادات العامة
+let _genDirty=false;
+function _wireGenDirty(){
+  const ids=['stAD','stCUR','stCC','stOW','stUSD','stBI','stLS','stAAD'];
+  const btn=document.querySelector('[onclick="saveSett()"]');
+  if(!btn) return;
+  if(!btn.dataset.origLabel) btn.dataset.origLabel=btn.textContent;
+  const mark=()=>{ _genDirty=true; btn.textContent='💾 حفظ • تغييرات غير محفوظة'; btn.classList.add('bw'); };
+  ids.forEach(id=>{ const el=document.getElementById(id); if(el && !el._dirtyWired){ el._dirtyWired=true; el.addEventListener('input',mark); } });
 }
 
 async function rEmailCfgUI() {
@@ -6603,6 +6924,7 @@ function saveSett(){
   const ls=parseInt(document.getElementById('stLS').value);db.settings.lowStockThreshold=(!isNaN(ls)&&ls>=0)?ls:3;
   const aad=parseInt(document.getElementById('stAAD').value);db.settings.alertAcctDays=(!isNaN(aad)&&aad>=1)?aad:5;
   save();notify('✅ تم الحفظ');rC();rQSB();rK();rToday();if(typeof rAlerts==='function')rAlerts();if(localStorage.getItem('auto_bk')==='1')startAutoBk();rBkUI();
+  _genDirty=false; const _b=document.querySelector('[onclick="saveSett()"]'); if(_b && _b.dataset.origLabel){ _b.textContent=_b.dataset.origLabel; _b.classList.remove('bw'); }
 }
 function saveTpl(){db.settings.templates.renew=(document.getElementById('tplR').value||'').trim()||DTPL.renew;db.settings.templates.debt=(document.getElementById('tplD').value||'').trim()||DTPL.debt;save();notify('✅ تم');}
 function resetTpl(){db.settings.templates={...DTPL};save();rSettings();notify('↩️ تم');}
@@ -6611,7 +6933,7 @@ function rSvList(){
 }
 function edSvN(i,v){const n=(v||'').trim();if(!n){notify('⚠️ الاسم فارغ','wa');rSvList();return;}const old=db.services[i]&&db.services[i].name;if(!old||old===n)return;if(db.services.some((s,j)=>j!==i&&s.name===n)){notify('⚠️ يوجد خدمة بنفس الاسم','wa');rSvList();return;}db.services[i].name=n;if(db.prices[old]){db.prices[n]=db.prices[old];delete db.prices[old];}db.customers.forEach(c=>(c.subscriptions||[]).forEach(s=>{if(s.service===old)s.service=n;}));db.accounts.forEach(a=>{if(a.service===old)a.service=n;});db.cards.forEach(c=>{if(c.type===old)c.type=n;});db.manualDebts.forEach(d=>{if(d.service===old)d.service=n;});if(aTypeFilt===old)aTypeFilt=n;if(kTypeFilt===old)kTypeFilt=n;save();rSvList();notify('✅ تم');}
 function edSvC(i,c){if(!db.services[i])return;db.services[i].color=c;save();}
-function addSv(){const n=(document.getElementById('nSN').value||'').trim(),c2=document.getElementById('nSC').value;if(!n){notify('⚠️ أدخل الاسم','wa');return;}if(db.services.some(s=>s.name===n)){notify('⚠️ يوجد','wa');return;}db.services.push({name:n,color:c2});document.getElementById('nSN').value='';save();rSvList();notify('✅ تمت الإضافة');}
+function addSv(){const n=_clean((document.getElementById('nSN').value||'').trim(),60),c2=document.getElementById('nSC').value;if(!n){notify('⚠️ أدخل الاسم','wa');return;}if(db.services.some(s=>s.name===n)){notify('⚠️ يوجد','wa');return;}db.services.push({name:n,color:c2});document.getElementById('nSN').value='';save();rSvList();notify('✅ تمت الإضافة');}
 function delSv(i){showConfirm({icon:'🗑️',title:'حذف الخدمة',msg:'هل تريد حذف هذه الخدمة؟',okLabel:'حذف',okClass:'bd',onOk:()=>{db.services.splice(i,1);save();rSvList();}});}
 
 // ══════════════════════════════════════════
@@ -6884,7 +7206,7 @@ function openExpenseM(id=null){
 
 // ── حفظ ──
 function saveExpense(){
-  const desc=(document.getElementById('expDesc').value||'').trim();
+  const desc=_clean((document.getElementById('expDesc').value||'').trim(),120);
   const amt=parseFloat(document.getElementById('expAmt').value);
   if(!desc){ notify('⚠️ أدخل وصف المصروف','wa'); return; }
   if(isNaN(amt)||amt<0){ notify('⚠️ أدخل مبلغاً صحيحاً','wa'); return; }
@@ -7055,7 +7377,7 @@ function renderExpenses(){
 
   if(!list.length){ listEl.innerHTML=`<div>${archActBtn}${archBtn}</div><div class="empty"><div class="empty-i">🔍</div><div class="empty-t">لا نتائج مطابقة</div></div>`; return; }
 
-  listEl.innerHTML=`<div>${archActBtn}${archBtn}</div>`+list.map(e=>{
+  listEl.innerHTML=`<div class="list-span-full">${archActBtn}${archBtn}</div>`+list.map(e=>{
     const rec = e.recur==='monthly'?'🔄 شهري':e.recur==='yearly'?'📅 سنوي':'1️⃣ مرة';
     const old = !e.archived && e.recur==='once' && e.date && ((Date.now()-new Date(e.date+'T00:00:00'))/86400000)>60;
     return `<div style="display:flex;align-items:center;gap:.45rem;background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:.5rem .7rem;margin-bottom:.3rem;flex-wrap:wrap;${(old||e.archived)?'opacity:.55':''}">
@@ -7231,7 +7553,7 @@ function initKeyboardShortcuts() {
 
     // أرقام 1-9 للتنقل بين الأقسام (بدون مودال مفتوح)
     if(!document.querySelector('.ov.on') && /^[1-9]$/.test(e.key)) {
-      const tabs = ['cust','accts','cards','prices','alerts','finance','monthly','expenses','mysubs'];
+      const tabs = ['cust','alerts','debts','cards','accts','prices','finance','monthly','expenses'];
       const idx = parseInt(e.key)-1;
       if(tabs[idx]) { e.preventDefault(); sw(tabs[idx]); }
     }
@@ -7794,7 +8116,7 @@ function rMySubs() {
     const isActive = s.active !== false;
     const cycleLabel = ({1:'شهري',3:'كل 3 أشهر',6:'نصف سنوي',12:'سنوي'})[s.cycle||1] || 'شهري';
     let divider='';
-    if(!isActive && !_shownPausedHdr && _mySubFilt==='all' && !q){ _shownPausedHdr=true; divider='<div style="font-size:.62rem;font-weight:800;color:var(--mu);margin:.6rem 0 .4rem;padding-right:.2rem">⏸ الموقوفة</div>'; }
+    if(!isActive && !_shownPausedHdr && _mySubFilt==='all' && !q){ _shownPausedHdr=true; divider='<div class="list-span-full" style="font-size:.62rem;font-weight:800;color:var(--mu);margin:.6rem 0 .4rem;padding-right:.2rem">⏸ الموقوفة</div>'; }
 
     let statusBadge = '';
     if(!isActive) {
@@ -7889,7 +8211,7 @@ function openMySubM(id=null) {
 }
 
 function saveMySub() {
-  const name = (document.getElementById('msName').value||'').trim();
+  const name = _clean((document.getElementById('msName').value||'').trim(),60);
   const cost = parseFloat(document.getElementById('msCost').value);
   if(!name)       { notify('⚠️ أدخل اسم الخدمة','wa'); return; }
   if(isNaN(cost)||cost<0) { notify('⚠️ أدخل التكلفة','wa'); return; }
@@ -8246,6 +8568,15 @@ function rToday() {
   const sales = buildSalesLog();
   const revToday = sales.filter(s=>s.date===todayISO).reduce((a,s)=>a+s.price,0);
   const revYest  = sales.filter(s=>s.date===yIso).reduce((a,s)=>a+s.price,0);
+  // ── نبض الشهر (Month-to-date) ──
+  const _ym = todayISO.slice(0,7), _mm = _ym.slice(5,7);
+  const revMonth = sales.filter(s=>(s.date||'').slice(0,7)===_ym).reduce((a,s)=>a+s.price,0);
+  const newCustMonth = db.customers.filter(c=>(c.createdAt||'').slice(0,7)===_ym).length;
+  const _exps = Array.isArray(db.expenses)?db.expenses.filter(e=>!e.archived):[];
+  const monthExp = _exps.filter(e=>e.recur==='monthly').reduce((a,e)=>a+n2(e.amount),0)
+                 + _exps.filter(e=>e.recur==='yearly'&&(e.date||'').slice(5,7)===_mm).reduce((a,e)=>a+n2(e.amount),0)
+                 + _exps.filter(e=>e.recur==='once'&&(e.date||'').slice(0,7)===_ym).reduce((a,e)=>a+n2(e.amount),0);
+  const estNet = revMonth - monthExp;
   let trendHtml = '';
   if(revYest > 0){
     const pct = Math.round((revToday-revYest)/revYest*100);
@@ -8275,6 +8606,22 @@ function rToday() {
     <div class="qsc" onclick="sw('debts')" style="cursor:pointer"><span style="font-size:1.2rem">⚠️</span><div style="flex:1;min-width:0"><div style="font-size:.58rem;color:var(--mu);font-weight:600">إجمالي الديون</div><div style="font-size:.9rem;font-weight:900;color:var(--er)">${db.customers.reduce((a,c)=>a+custOwes(c),0).toFixed(0)} ${CUR}</div></div></div>
   </div>`;
 
+  // ── نبض الشهر ──
+  html += `<div style="background:linear-gradient(135deg,rgba(124,106,255,.1),rgba(0,200,150,.06));border:1px solid rgba(124,106,255,.2);border-radius:12px;padding:.7rem .85rem;margin-bottom:.85rem">
+    <div style="font-size:.58rem;color:var(--mu);font-weight:700;margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.04em">📈 نبض هذا الشهر</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;text-align:center">
+      <div onclick="sw('finance')" style="cursor:pointer"><div style="font-size:.95rem;font-weight:900;color:var(--ok)" dir="rtl">${revMonth.toFixed(0)}</div><div style="font-size:.54rem;color:var(--mu)">إيراد الشهر ${CUR}</div></div>
+      <div onclick="sw('finance')" style="cursor:pointer;border-right:1px solid var(--b1);border-left:1px solid var(--b1)"><div style="font-size:.95rem;font-weight:900;color:${estNet>=0?'var(--ach)':'var(--er)'}" dir="rtl">${estNet.toFixed(0)}</div><div style="font-size:.54rem;color:var(--mu)">صافي تقديري</div></div>
+      <div onclick="sw('cust')" style="cursor:pointer"><div style="font-size:.95rem;font-weight:900;color:var(--cd)">${newCustMonth}</div><div style="font-size:.54rem;color:var(--mu)">زبائن جدد</div></div>
+    </div>
+  </div>`;
+
+  // ── أزرار إجراء سريع ──
+  html += `<div style="display:flex;gap:.45rem;margin-bottom:1.1rem;flex-wrap:wrap">
+    <button class="btn bp btn-sm" style="flex:1;min-width:120px" onclick="openAdd()">➕ زبون جديد</button>
+    <button class="btn bg btn-sm" style="flex:1;min-width:120px" onclick="openExpenseM()">💸 تسجيل مصروف</button>
+  </div>`;
+
   if(totalTasks === 0) {
     html += `<div class="empty"><div class="empty-i">🎉</div><div class="empty-t">كل شيء تحت السيطرة!</div><div class="empty-s">لا مهام عاجلة اليوم — لا اشتراكات تنتهي، لا ديون قديمة، المخزون جيد</div></div>`;
     el.innerHTML = html; el.dataset.rendered='1'; _todayVer=_dataVer;
@@ -8282,6 +8629,7 @@ function rToday() {
   }
 
   html += `<div style="font-size:.72rem;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.7rem;display:flex;align-items:center;gap:.4rem">📋 يحتاج متابعتك اليوم <span style="background:var(--er);color:#fff;font-size:.6rem;padding:.05rem .4rem;border-radius:20px">${totalTasks}</span></div>`;
+  html += '<div id="todayTasks">';
 
   // taskCard مع زر "راسل الكل" ومؤشر العناصر المخفية
   const taskCard = (icon, title, items, color, opts) => {
@@ -8371,6 +8719,7 @@ function rToday() {
       <button class="btn bw btn-xs" onclick="event.stopPropagation();sw('prices')">🏷️</button>${snzBtn('lose:'+name)}
     </div>`);
   html += taskCard('📉', 'خدمات خاسرة', losingItems, 'var(--er)');
+  html += '</div>';
 
   el.innerHTML = html; el.dataset.rendered='1'; _todayVer=_dataVer;
 }
@@ -8438,9 +8787,10 @@ function rTemplates() {
   }
   el.innerHTML = tpls.map(t=>{
     const srv = db.services.find(x=>x.name===t.service)||{color:'var(--ach)'};
+    const uc = n2(t.useCount);
     return `<div style="display:flex;align-items:center;gap:.5rem;background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:.5rem .7rem">
       <div style="width:8px;height:8px;border-radius:50%;background:${srv.color};flex-shrink:0"></div>
-      <div style="flex:1;min-width:0"><div style="font-size:.76rem;font-weight:700">${t.name||t.service}</div><div style="font-size:.62rem;color:var(--mu)">${t.service} · ${t.months||1} شهر · ${n2(t.price).toFixed(0)} ${CUR}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-size:.76rem;font-weight:700">${t.name||t.service}${uc>0?` <span style="font-size:.54rem;color:var(--mu);font-weight:600">· استُخدم ${uc}×</span>`:''}</div><div style="font-size:.62rem;color:var(--mu)">${t.service} · ${t.months||1} شهر · ${n2(t.price).toFixed(0)} ${CUR}</div></div>
       <button class="btn bp btn-xs" onclick="applyTemplate('${t.id}')">⚡ استخدم</button>
       <button class="btn bd btn-xs" onclick="delTemplate('${t.id}')">🗑️</button>
     </div>`;
@@ -8465,6 +8815,7 @@ function saveTemplateM() {
 function applyTemplate(id) {
   const t = getTemplates().find(x=>x.id===id);
   if(!t) { notify('⚠️ القالب غير موجود','wa'); return; }
+  t.useCount = n2(t.useCount)+1; save();
   openAdd();
   addSE({service:t.service, months:t.months, price:t.price});
   toggleSentsEmpty();
@@ -8640,45 +8991,126 @@ function runGlobalSearch() {
 function rReferrals() {
   const el = document.getElementById('refList');
   if(!el) return;
-  // عد الإحالات لكل زبون
-  const refCount = {};
+  const threshold = n2((db.settings||{}).refThreshold) || 5;
+  const given = db.refRewards || {};
+  // تجميع المُحالين لكل مُحيل مع قيمتهم (إيراد اشتراكاتهم)
+  const refMap = {};
   db.customers.forEach(c=>{
-    if(c.referredBy){ refCount[c.referredBy]=(refCount[c.referredBy]||0)+1; }
+    if(c.referredBy){
+      const k=c.referredBy;
+      refMap[k]=refMap[k]||{name:k,cnt:0,value:0,names:[]};
+      refMap[k].cnt++;
+      refMap[k].names.push(c.name);
+      const cv=(c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled).reduce((a,s)=>a+n2(s.price),0);
+      refMap[k].value+=cv;
+    }
   });
-  const refs = Object.entries(refCount).map(([name,cnt])=>({name,cnt})).sort((a,b)=>b.cnt-a.cnt);
+  const refs = Object.values(refMap).sort((a,b)=>b.cnt-a.cnt);
   if(!refs.length){
     el.innerHTML='<div style="font-size:.72rem;color:var(--mu);text-align:center;padding:.8rem">لا إحالات بعد. عند إضافة زبون، حدّد من أحاله ليُحسب هنا.</div>';
     return;
   }
-  el.innerHTML = refs.map((r,i)=>`
-    <div style="display:flex;align-items:center;gap:.5rem;background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:.55rem .75rem;margin-bottom:.3rem">
+  const totalRefVal = refs.reduce((a,r)=>a+r.value,0);
+  const dueCount = refs.filter(r=>Math.floor(r.cnt/threshold) - n2(given[r.name]) > 0).length;
+  const head = `<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;flex-wrap:wrap">
+    <div style="font-size:.6rem;color:var(--mu);flex:1">💰 قيمة المُحالين: <b style="color:var(--ok)">${totalRefVal.toFixed(0)} ${CUR}</b>${dueCount>0?` • <span style="color:var(--wa)">🎁 ${dueCount} مكافأة مستحقة</span>`:''}</div>
+    <button class="btn bg btn-xs" style="font-size:.56rem" onclick="openRefRule()">⚙️ كل ${threshold} = مكافأة</button>
+  </div>`;
+  el.innerHTML = head + refs.map((r,i)=>{
+    const earned = Math.floor(r.cnt/threshold);
+    const gv = n2(given[r.name]);
+    const due = earned - gv;
+    const prog = r.cnt % threshold;
+    return `<div style="display:flex;align-items:center;gap:.5rem;background:var(--s2);border:1px solid ${due>0?'rgba(255,184,48,.3)':'var(--b1)'};border-radius:9px;padding:.55rem .75rem;margin-bottom:.3rem">
       <div style="width:22px;height:22px;border-radius:6px;background:var(--ac-glow);display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:800;color:var(--ach)">${i+1}</div>
-      <div style="flex:1;font-size:.78rem;font-weight:700">${r.name}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.78rem;font-weight:700;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">${r.name} ${due>0?`<span style="font-size:.54rem;background:rgba(255,184,48,.15);color:var(--wa);padding:.02rem .35rem;border-radius:20px;font-weight:800">🎁 مكافأة مستحقة ×${due}</span>`:''}</div>
+        <div style="font-size:.58rem;color:var(--mu);margin-top:1px">قيمة المُحالين ${r.value.toFixed(0)} ${CUR} • نحو المكافأة التالية ${prog}/${threshold}</div>
+      </div>
       <span style="background:rgba(0,200,150,.12);color:var(--ok);font-size:.65rem;font-weight:700;padding:.1rem .5rem;border-radius:20px">${r.cnt} إحالة</span>
-    </div>`).join('');
+      ${due>0?`<button class="btn bs btn-xs" onclick="grantRefReward('${safe(r.name)}')">✓ منحت</button>`:''}
+    </div>`;
+  }).join('');
 }
+function grantRefReward(name){
+  if(!db.refRewards) db.refRewards={};
+  db.refRewards[name]=n2(db.refRewards[name])+1;
+  save(); rReferrals(); notify('🎁 تم تسجيل منح المكافأة لـ '+name);
+}
+function openRefRule(){
+  const cur=n2((db.settings||{}).refThreshold)||5;
+  const html=`<div class="ov on" id="mRefRule" onclick="if(event.target===this)closeRefRule()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="mt">🎁 قاعدة مكافأة الإحالة</div>
+      <div style="font-size:.66rem;color:var(--mu);margin-bottom:.7rem">كم إحالة تمنح مكافأة واحدة؟ (مثلاً 5 إحالات = شهر مجاني).</div>
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <span style="font-size:.74rem">كل</span>
+        <input id="refThreshInp" type="number" min="1" step="1" dir="ltr" value="${cur}" style="width:80px;background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:.5rem;color:var(--tx);font-family:Cairo,sans-serif;font-size:.8rem;text-align:center">
+        <span style="font-size:.74rem">إحالات = مكافأة</span>
+      </div>
+      <div style="display:flex;gap:.5rem;margin-top:.8rem">
+        <button class="btn bp" style="flex:1" onclick="saveRefRule()">💾 حفظ</button>
+        <button class="btn bg" onclick="closeRefRule()">إلغاء</button>
+      </div>
+    </div></div>`;
+  const wrap=document.createElement('div'); wrap.id='refRuleWrap'; wrap.innerHTML=html;
+  document.body.appendChild(wrap);
+}
+function closeRefRule(){ const w=document.getElementById('refRuleWrap'); if(w) w.remove(); }
+function saveRefRule(){
+  if(!db.settings) db.settings={};
+  const v=parseInt((document.getElementById('refThreshInp')||{}).value);
+  db.settings.refThreshold=(!isNaN(v)&&v>0)?v:5;
+  save(); closeRefRule(); rReferrals(); notify('✅ تم حفظ القاعدة');
+}
+window.grantRefReward=grantRefReward; window.openRefRule=openRefRule; window.closeRefRule=closeRefRule; window.saveRefRule=saveRefRule;
 
 // ══════════════════════════════════════════
 // UPSELL SUGGESTIONS — اقتراحات بيع إضافي
 // ══════════════════════════════════════════
 function getUpsellSuggestions() {
-  const suggestions = [];
-  const popularSvcs = {};
+  // أسعار وشعبية الخدمات
+  const popularSvcs = {}; const svcPrices = {};
   db.customers.forEach(c=>(c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled).forEach(s=>{
     popularSvcs[s.service]=(popularSvcs[s.service]||0)+1;
+    if(n2(s.price)>0){ (svcPrices[s.service]=svcPrices[s.service]||[]).push(n2(s.price)); }
   }));
-  const topSvcs = Object.entries(popularSvcs).sort((a,b)=>b[1]-a[1]).map(([n])=>n).slice(0,4);
+  const topSvcs = Object.entries(popularSvcs).sort((a,b)=>b[1]-a[1]).map(([n])=>n);
+  const priceOf = sv => { const arr=svcPrices[sv]||[]; return arr.length?arr.sort((a,b)=>a-b)[Math.floor(arr.length/2)]:0; }; // الوسيط
+  const offered = db.upsellOffered || {};
+
+  const sugg = [];
   db.customers.forEach(c=>{
     const active = (c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled);
     if(!active.length) return;
     const hasServices = active.map(s=>s.service);
+    // أفضل خدمة شائعة لا يملكها هذا الزبون
     const missing = topSvcs.filter(sv=>!hasServices.includes(sv));
-    if(missing.length && active.some(s=>s.expiry&&du(s.expiry)>0)) {
-      suggestions.push({c, has:hasServices[0], suggest:missing[0]});
-    }
+    if(!missing.length) return;
+    const suggest = missing[0];
+    // قيمة الزبون (إجمالي اشتراكاته) + قرب التجديد
+    const custValue = active.reduce((a,s)=>a+n2(s.price),0);
+    const nearestExp = Math.min(...active.map(s=>s.expiry?du(s.expiry):9999));
+    if(!(nearestExp < 9999)) return; // لا تاريخ انتهاء فعّال
+    if(nearestExp < -30) return; // منتهٍ منذ زمن — ليس فرصة جيدة
+    const expValue = priceOf(suggest);
+    const wasOffered = !!offered[c.id+'|'+suggest];
+    // النقاط: قيمة عالية + قرب تجديد (نافذة 0-14 يوم مثالية) + قيمة متوقعة
+    let score = custValue*0.5 + expValue*0.4;
+    if(nearestExp>=0 && nearestExp<=14) score += 40;       // فرصة ذهبية عند التجديد
+    else if(nearestExp>=-7 && nearestExp<0) score += 25;    // متأخر قليلاً
+    if(active.length>=2) score += 15;                        // زبون مخلص (عدة اشتراكات)
+    if(wasOffered) score -= 100;                            // اعرض غير المعروض أولاً
+    sugg.push({c, has:hasServices[0], suggest, custValue, nearestExp, expValue, wasOffered, score});
   });
-  return suggestions.slice(0,10);
+  return sugg.sort((a,b)=>b.score-a.score).slice(0,12);
 }
+function markUpsellOffered(cid, suggest){
+  if(!db.upsellOffered) db.upsellOffered={};
+  db.upsellOffered[cid+'|'+suggest]=new Date().toISOString();
+  save(); rUpsell();
+}
+window.markUpsellOffered=markUpsellOffered;
 function rUpsell() {
   const el = document.getElementById('upsellList');
   if(!el) return;
@@ -8687,10 +9119,17 @@ function rUpsell() {
     el.innerHTML='<div style="font-size:.72rem;color:var(--mu);text-align:center;padding:.8rem">لا اقتراحات حالياً. ستظهر فرص البيع الإضافي عندما يكبر عدد زبائنك.</div>';
     return;
   }
-  el.innerHTML = sugg.map(({c,has,suggest})=>{
-    const wa = c.phone?`<a class="wa-btn" href="${wah(c.phone,`مرحباً ${c.name}، عندنا عرض على ${suggest} 🎉`)}" target="_blank" style="padding:.15rem .45rem;font-size:.62rem" onclick="event.stopPropagation()">💬 اعرض</a>`:'';
-    return `<div style="display:flex;align-items:center;gap:.5rem;background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:.55rem .75rem;margin-bottom:.3rem;cursor:pointer" onclick="viewC('${c.id}')">
-      <div style="flex:1;min-width:0"><div style="font-size:.76rem;font-weight:700">${c.name}</div><div style="font-size:.62rem;color:var(--mu)">عنده ${has} — اعرض عليه <b style="color:var(--ach)">${suggest}</b></div></div>
+  const totalExp = sugg.filter(s=>!s.wasOffered).reduce((a,s)=>a+s.expValue,0);
+  const head = totalExp>0 ? `<div style="font-size:.6rem;color:var(--mu);margin-bottom:.5rem;padding-right:.2rem">💡 ${sugg.filter(s=>!s.wasOffered).length} فرصة • قيمة متوقعة ~<b style="color:var(--ok)">${totalExp.toFixed(0)} ${CUR}</b></div>` : '';
+  el.innerHTML = head + sugg.map(({c,has,suggest,nearestExp,expValue,wasOffered})=>{
+    const urgent = nearestExp>=0 && nearestExp<=14;
+    const urgencyTag = urgent ? `<span style="font-size:.54rem;background:rgba(255,184,48,.15);color:var(--wa);padding:.02rem .32rem;border-radius:20px;font-weight:700">⏰ يجدّد خلال ${nearestExp}ي</span>` : (nearestExp<0?`<span style="font-size:.54rem;background:rgba(255,61,128,.12);color:var(--er);padding:.02rem .32rem;border-radius:20px">متأخر ${Math.abs(nearestExp)}ي</span>`:'');
+    const wa = c.phone?`<a class="wa-btn" href="${wah(c.phone,`مرحباً ${c.name}، عندنا عرض على ${suggest} 🎉`)}" target="_blank" style="padding:.15rem .45rem;font-size:.62rem" onclick="event.stopPropagation();markUpsellOffered('${c.id}','${safe(suggest)}')">💬 اعرض</a>`:'';
+    return `<div style="display:flex;align-items:center;gap:.5rem;background:var(--s2);border:1px solid ${wasOffered?'rgba(0,200,150,.2)':'var(--b1)'};border-radius:9px;padding:.55rem .75rem;margin-bottom:.3rem;cursor:pointer;${wasOffered?'opacity:.6':''}" onclick="viewC('${c.id}')">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.76rem;font-weight:700;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">${c.name} ${urgencyTag} ${wasOffered?'<span style="font-size:.54rem;background:rgba(0,200,150,.12);color:var(--ok);padding:.02rem .32rem;border-radius:20px">✓ تم العرض</span>':''}</div>
+        <div style="font-size:.62rem;color:var(--mu);margin-top:1px">عنده ${has} — اعرض عليه <b style="color:var(--ach)">${suggest}</b>${expValue>0?` <span style="color:var(--ok)">(~${expValue.toFixed(0)} ${CUR})</span>`:''}</div>
+      </div>
       ${wa}
     </div>`;
   }).join('');
@@ -8805,7 +9244,7 @@ function renderActivity() {
   let html='';
   ['today','yest','week','older'].forEach(g=>{
     if(!groups[g].length) return;
-    html+=`<div style="font-size:.62rem;font-weight:800;color:var(--mu);margin:.55rem 0 .35rem;padding-right:.2rem">${gLabels[g]} <span style="color:var(--tx3)">(${groups[g].length})</span></div>`;
+    html+=`<div class="list-span-full" style="font-size:.62rem;font-weight:800;color:var(--mu);margin:.55rem 0 .35rem;padding-right:.2rem">${gLabels[g]} <span style="color:var(--tx3)">(${groups[g].length})</span></div>`;
     html+=groups[g].map(rowHtml).join('');
   });
   el.innerHTML=html;
@@ -8982,25 +9421,39 @@ function _timingSafeEq(a, b) {
   return diff === 0;
 }
 
-  // ── Brute-force lock ──
-  let _fails = 0, _locked = false, _lt = null;
+  // ── Brute-force lock (دائم في localStorage + متصاعد) ──
+  let _locked = false, _lt = null;
+  const _LK_F='_lg_fails', _LK_U='_lg_lockUntil', _LK_L='_lg_lockLevel';
+  function _lgGet(k){ try{ return parseInt(localStorage.getItem(k))||0; }catch(e){ return 0; } }
+  function _lgSet(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
+  function _lockDuration(level){ return level>=3 ? 300 : level===2 ? 60 : 30; } // ثوانٍ
+  function _startLockCountdown(){
+    const btn=document.getElementById('lgBtn'); if(!btn) return;
+    _locked=true; btn.disabled=true;
+    if(_lt) clearInterval(_lt);
+    const tick=()=>{
+      const rem=Math.ceil((_lgGet(_LK_U)-Date.now())/1000);
+      if(rem<=0){ clearInterval(_lt); _locked=false; btn.disabled=false; btn.textContent='تسجيل الدخول'; const e=document.getElementById('loginErr'); if(e)e.style.display='none'; return; }
+      const m=Math.floor(rem/60), s=rem%60;
+      btn.textContent='🔒 انتظر '+(m>0?m+':'+String(s).padStart(2,'0'):s+'ث');
+    };
+    tick(); _lt=setInterval(tick,1000);
+  }
+  function _checkLockOnLoad(){ if(_lgGet(_LK_U)>Date.now()) _startLockCountdown(); }
   function _recordFail() {
-    _fails++;
-    if (_fails >= 5) {
-      _locked = true;
-      const btn = document.getElementById('lgBtn');
-      let s = 30;
-      if (btn) { btn.disabled = true; btn.textContent = '🔒 انتظر ' + s + 'ث'; }
-      _lt = setInterval(() => {
-        s--;
-        if (btn) btn.textContent = '🔒 انتظر ' + s + 'ث';
-        if (s <= 0) {
-          clearInterval(_lt); _locked = false; _fails = 0;
-          if (btn) { btn.disabled = false; btn.textContent = 'تسجيل الدخول'; }
-        }
-      }, 1000);
+    let f=_lgGet(_LK_F)+1; _lgSet(_LK_F,f);
+    const rem=5-f;
+    if(f>=5){
+      const level=_lgGet(_LK_L)+1; _lgSet(_LK_L,level); _lgSet(_LK_F,0);
+      const dur=_lockDuration(level);
+      _lgSet(_LK_U, Date.now()+dur*1000);
+      _showErr('🔒 تم القفل مؤقتاً بعد 5 محاولات خاطئة');
+      _startLockCountdown();
+    } else {
+      _showErr('اسم المستخدم أو كلمة السر غير صحيحة • متبقّي '+rem+' '+(rem===1?'محاولة':'محاولات')+' قبل القفل');
     }
   }
+  function _clearLock(){ _lgSet(_LK_F,0); _lgSet(_LK_L,0); try{localStorage.removeItem(_LK_U);}catch(e){} if(_lt)clearInterval(_lt); _locked=false; }
 
   // ── UI helpers ──
   function _showErr(msg) {
@@ -9009,21 +9462,35 @@ function _timingSafeEq(a, b) {
   }
 
   // ── Load & decrypt DB using XOR key derived from password ──
-  function _loadDB(encKey) {
+  async function _loadDB(encKey) {
     _EK = encKey; // set global encryption key
     const raw = localStorage.getItem('subs_v5');
     if (!raw) return null;
 
-    // 1. Try plain JSON first (existing unencrypted data — most common on first run)
+    // 1. بيانات مشفّرة بـAES-GCM (ENC1) — فكّ التشفير
+    if (raw.startsWith('ENC1:')) {
+      try {
+        const parsed = JSON.parse(await _aesDec(raw, encKey));
+        if (parsed && typeof parsed === 'object') {
+          // نجح الفكّ ⇒ التشفير مؤكَّد ⇒ امسح النسخة الصريحة المؤقتة (لم يعد هناك نصّ صريح)
+          if (localStorage.getItem('subs_v5_premig')) localStorage.removeItem('subs_v5_premig');
+          return parsed;
+        }
+      } catch(e) {
+        // فشل الفكّ (كلمة سر خاطئة؟) — جرّب نسخة الترحيل الاحتياطية الصريحة
+        const bk = localStorage.getItem('subs_v5_premig');
+        if (bk && bk.startsWith('{')) { try { return JSON.parse(bk); } catch(e2){} }
+        return null; // قابل للاسترجاع: أعد الدخول بكلمة السر الصحيحة أو استورد نسخة احتياطية
+      }
+    }
+
+    // 2. JSON صريح (تشغيل أول أو بيانات قديمة) — سيُشفَّر تلقائياً عند الحفظ التالي
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) {
-        // Valid plain data found — will be re-saved encrypted after login
-        return parsed;
-      }
+      if (parsed && typeof parsed === 'object' && (parsed.customers || parsed.services)) return parsed;
     } catch(e) {}
 
-    // 2. Try XOR decryption (data was already encrypted by this app)
+    // 3. توافق خلفي: XOR قديم
     const dec = _xorDec(raw, encKey);
     if (dec) {
       try {
@@ -9047,7 +9514,7 @@ function _timingSafeEq(a, b) {
       setTimeout(() => { ov.style.display = 'none'; }, 320); }
 
     // 3. Load data — localStorage فوراً (سريع) إن وُجدت
-    let loaded = _loadDB(encKey);
+    let loaded = await _loadDB(encKey);
 
     // ── إن لم توجد بيانات محلية (جهاز/متصفح جديد، أو localStorage فُرِّغ) ──
     // نحاول الجلب من Supabase فوراً قبل إنشاء قاعدة بيانات فارغة — هذا يمنع فقدان البيانات القديمة
@@ -9107,11 +9574,12 @@ function _timingSafeEq(a, b) {
       save();
     } else {
       // فشل الاتصال بـ Supabase ولا توجد بيانات محلية — لا نحفظ فوق أي شيء، فقط محلياً
-      try { localStorage.setItem('subs_v5', JSON.stringify(db)); } catch(e) {}
+      _persistDB(JSON.stringify(db));
       console.warn('تخطي الرفع السحابي: فشل الاتصال بـ Supabase — لمنع فقدان البيانات المحتملة');
     }
 
     // 6. Run app — تظهر البيانات فوراً من localStorage
+    _applyStoredAccent();
     rQSB(); rUBan(); rC(); uh(); rToday();
     initDashboard();
     initPushNotifications();
@@ -9161,7 +9629,7 @@ function _timingSafeEq(a, b) {
         db.customers.forEach(ensureC);
         db.manualDebts.forEach(ensureMD);
         CUR = String(db.settings.currency || 'د.ل');
-        localStorage.setItem('subs_v5', cloudStr);
+        _persistDB(cloudStr);
 
         // تحديث الواجهة بالبيانات الأحدث — فقط الأقسام المرئية حالياً
         rQSB(); rUBan(); uh();
@@ -9325,12 +9793,12 @@ function _timingSafeEq(a, b) {
         }
         // Use the entered credentials as the new permanent credentials
         if (!u || !p) { _showErr('أدخل اسم المستخدم وكلمة السر التي تريدها'); if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';} return; }
-        if (p.length < 6) { _showErr('كلمة السر يجب أن تكون 6 أحرف على الأقل'); if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';} return; }
+        if (p.length < 8) { _showErr('كلمة السر يجب أن تكون 8 أحرف على الأقل (هي أيضاً مفتاح تشفير بياناتك)'); if (btn){btn.disabled=false;btn.textContent='تسجيل الدخول';} return; }
         const newHash = await _mkHash(u, p);
         // First run: save to Supabase + local cache
         await _sbSet('login_creds', JSON.stringify({ u: u.toLowerCase(), h: newHash }));
         localStorage.setItem(_CK, JSON.stringify({ u: u.toLowerCase(), h: newHash, _ts: Date.now() }));
-        _authed = true; _fails = 0;
+        _authed = true; _clearLock();
         // Derive 256-bit key from credentials using SHA-256
         const _rawKey = u.toLowerCase() + '\x00' + p + '\x00' + 'subs_sk_lby_2025_v2';
         crypto.subtle.digest('SHA-256', new TextEncoder().encode(_rawKey)).then(buf => {
@@ -9349,7 +9817,7 @@ function _timingSafeEq(a, b) {
       // so there is no way to verify one without the other
       if (_timingSafeEq(ih, cr.h) && _timingSafeEq(u.toLowerCase(), cr.u.toLowerCase())) {
         _authed = true;
-        _fails  = 0;
+        _clearLock();
         document.getElementById('loginErr') && (document.getElementById('loginErr').style.display = 'none');
         // Derive XOR key from credentials
         // Derive 256-bit key from credentials using SHA-256
@@ -9360,9 +9828,8 @@ function _timingSafeEq(a, b) {
         });
       } else {
         _recordFail();
-        _showErr('اسم المستخدم أو كلمة السر غير صحيحة');
         if (pEl) { pEl.value = ''; pEl.focus(); }
-        if (btn) { btn.disabled = false; btn.textContent = 'تسجيل الدخول'; }
+        if (btn && !_locked) { btn.disabled = false; btn.textContent = 'تسجيل الدخول'; }
         const card = document.querySelector('#loginOv > div');
         if (card) { card.style.animation = '_sk .35s'; setTimeout(() => card.style.animation = '', 380); }
       }
@@ -9464,7 +9931,14 @@ function _timingSafeEq(a, b) {
     const ro = document.getElementById('resetOv');
     if (rm) rm.style.display = 'none';
     if (rf) rf.style.display = 'block';
-    if (ro) ro.style.display = 'flex';
+    if (ro) {
+      ro.style.display = 'flex';
+      if(!ro._wired){
+        ro._wired=true;
+        ro.addEventListener('click', e=>{ if(e.target===ro) ro.style.display='none'; });
+        document.addEventListener('keydown', e=>{ if(e.key==='Escape' && ro.style.display==='flex') ro.style.display='none'; });
+      }
+    }
     // ── Load and display masked email from config ──
     const disp = document.getElementById('resetEmailDisplay');
     if(disp) {
@@ -9597,6 +10071,38 @@ function _timingSafeEq(a, b) {
     i.type = i.type === 'password' ? 'text' : 'password';
     if (b) b.textContent = i.type === 'password' ? '👁️' : '🙈';
   };
+
+  // ── مقياس قوة كلمة السر ──
+  window._lgPwMeter = function() {
+    const p = (document.getElementById('lgPass')||{}).value || '';
+    const wrap = document.getElementById('lgStrength');
+    const bar = document.getElementById('lgStrengthBar');
+    const txt = document.getElementById('lgStrengthTxt');
+    if(!wrap||!bar||!txt) return;
+    if(!p){ wrap.style.display='none'; return; }
+    wrap.style.display='block';
+    let score=0;
+    if(p.length>=8) score++; if(p.length>=12) score++;
+    if(/[a-z]/.test(p)&&/[A-Z]/.test(p)) score++;
+    if(/[0-9]/.test(p)) score++;
+    if(/[^a-zA-Z0-9]/.test(p)) score++;
+    const levels=[
+      {w:'20%',c:'var(--er)',t:'ضعيفة جداً'},
+      {w:'40%',c:'var(--er)',t:'ضعيفة'},
+      {w:'60%',c:'var(--wa)',t:'متوسطة'},
+      {w:'80%',c:'var(--cd)',t:'جيدة'},
+      {w:'100%',c:'var(--ok)',t:'قوية'}
+    ];
+    const lv=levels[Math.min(score,5)-1]||levels[0];
+    bar.style.width=lv.w; bar.style.background=lv.c;
+    txt.textContent='قوة كلمة السر: '+lv.t; txt.style.color=lv.c;
+  };
+  window._lgCaps = function(e){
+    const w=document.getElementById('lgCaps'); if(!w||!e.getModifierState) return;
+    w.style.display = e.getModifierState('CapsLock') ? 'block' : 'none';
+  };
+  // فحص القفل المحفوظ عند تحميل الصفحة
+  try{ _checkLockOnLoad(); }catch(e){}
 
   // ── Shake animation ──
   const sty = document.createElement('style');
