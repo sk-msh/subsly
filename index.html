@@ -9384,7 +9384,7 @@ function showConfirm({icon='⚠️', title='تأكيد', msg='', okLabel='تأك
   btn.textContent = okLabel;
   btn.className = 'btn ' + okClass;
   _confirmCb = onOk;
-  btn.onclick = () => { closeConfirm(); if(_confirmCb) _confirmCb(); };
+  btn.onclick = () => { const cb=_confirmCb; closeConfirm(); if(cb) cb(); };
   const ov = document.getElementById('confirmOv');
   ov.classList.add('on');
   btn.focus();
@@ -9481,10 +9481,88 @@ function buildStatement(){
   return items;
 }
 
-function renderStatement(el){
+let _stmtMonth='all';
+function _setStmtMonth(m){ _stmtMonth=m; renderActivity(); }
+window._setStmtMonth=_setStmtMonth;
+
+// تصدير كشف الحساب (الشهر المختار) إلى PDF عبر الطباعة الأصلية للمتصفح
+function exportStatementPDF(){
   let items=buildStatement();
   const q=((document.getElementById('actSi')||{}).value||'').trim();
   if(q) items=items.filter(x=>smartMatch(x.name,q)||smartMatch(x.service,q));
+  const month=(typeof _stmtMonth!=='undefined')?_stmtMonth:'all';
+  if(month!=='all') items=items.filter(x=>(x.date||'').slice(0,7)===month);
+  const ar=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const mLabel = month==='all' ? 'كل الفترات' : (ar[parseInt(month.split('-')[1])-1]+' '+month.split('-')[0]);
+  const totalIn=items.filter(x=>x.dir==='in').reduce((a,x)=>a+x.amount,0);
+  const totalOut=items.filter(x=>x.dir==='out').reduce((a,x)=>a+x.amount,0);
+  const net=totalIn-totalOut;
+  const typeLabel={new:'اشتراك جديد',renew:'تجديد',card:'كرت',mysub:'اشتراكي',expense:'مصروف',acct:'تجديد حساب',deposit:'عربون'};
+  const rowsHtml=items.map(x=>{
+    const inn=x.dir==='in', isDep=x.type==='deposit';
+    const col=isDep?'#c98a00':(inn?'#0a9d6e':'#d12c5e');
+    const rem=(isDep&&x.remaining>0)?` <span style="color:#c98a00;font-size:9px">(باقٍ ${n2(x.remaining).toFixed(2)})</span>`:'';
+    return `<tr>
+      <td style="padding:6px 9px;border-bottom:1px solid #eee;font-weight:700">${esc(x.name)}</td>
+      <td style="padding:6px 9px;border-bottom:1px solid #eee;color:#555">${esc(x.service||'')}</td>
+      <td style="padding:6px 9px;border-bottom:1px solid #eee;color:#777;font-size:11px">${typeLabel[x.type]||''}${rem}</td>
+      <td style="padding:6px 9px;border-bottom:1px solid #eee;color:#777">${x.months?x.months+' ش':'—'}</td>
+      <td style="padding:6px 9px;border-bottom:1px solid #eee;direction:ltr;color:#777;font-size:11px">${x.date?toDMY(x.date):'—'}</td>
+      <td style="padding:6px 9px;border-bottom:1px solid #eee;font-weight:800;color:${col};direction:ltr;text-align:left;white-space:nowrap">${inn?'+':'−'}${x.amount.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+  const html=`<div style="font-family:'Segoe UI',Tahoma,sans-serif;direction:rtl;color:#222;background:#fff;padding:28px 30px;max-width:800px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #7c6aff;padding-bottom:14px;margin-bottom:18px">
+      <div><div style="font-size:24px;font-weight:900;color:#7c6aff">Subsly</div><div style="font-size:13px;color:#666;margin-top:2px">كشف حساب مالي</div></div>
+      <div style="text-align:left"><div style="font-size:15px;font-weight:800">📅 ${mLabel}</div><div style="font-size:11px;color:#999;margin-top:3px;direction:ltr">${toDMY(new Date().toISOString().slice(0,10))}</div></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:20px">
+      <div style="flex:1;background:#eafaf3;border:1px solid #b6e8d4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:5px">إجمالي المدفوعات</div><div style="font-size:18px;font-weight:900;color:#0a9d6e;direction:ltr">${totalIn.toFixed(2)} ${CUR}</div></div>
+      <div style="flex:1;background:#fdeaf1;border:1px solid #f5c2d5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:5px">المصاريف واشتراكاتي</div><div style="font-size:18px;font-weight:900;color:#d12c5e;direction:ltr">−${totalOut.toFixed(2)} ${CUR}</div></div>
+      <div style="flex:1;background:#eef0ff;border:1px solid #c9cdf5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:5px">الصافي</div><div style="font-size:18px;font-weight:900;color:${net>=0?'#0a9d6e':'#d12c5e'};direction:ltr">${net>=0?'+':'−'}${Math.abs(net).toFixed(2)} ${CUR}</div></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead><tr style="background:#f4f4f8;color:#555;font-size:11px">
+        <th style="padding:8px 9px;text-align:right">الاسم</th><th style="padding:8px 9px;text-align:right">الخدمة</th><th style="padding:8px 9px;text-align:right">النوع</th><th style="padding:8px 9px;text-align:right">المدة</th><th style="padding:8px 9px;text-align:right">التاريخ</th><th style="padding:8px 9px;text-align:left">المبلغ</th>
+      </tr></thead>
+      <tbody>${rowsHtml||'<tr><td colspan="6" style="padding:18px;text-align:center;color:#999">لا توجد حركات في هذه الفترة</td></tr>'}</tbody>
+    </table>
+    <div style="margin-top:22px;font-size:10px;color:#bbb;text-align:center;border-top:1px solid #eee;padding-top:10px">عدد الحركات: ${items.length} · أُنشئ بواسطة Subsly</div>
+  </div>`;
+  if(!document.getElementById('pdfPrintCss')){
+    const st=document.createElement('style'); st.id='pdfPrintCss';
+    st.textContent='#pdfArea{display:none}@media print{body.printing>*{display:none!important}body.printing>#pdfArea{display:block!important}@page{margin:1cm}}';
+    document.head.appendChild(st);
+  }
+  let area=document.getElementById('pdfArea'); if(area) area.remove();
+  area=document.createElement('div'); area.id='pdfArea'; area.innerHTML=html;
+  document.body.appendChild(area);
+  document.body.classList.add('printing');
+  const cleanup=()=>{ document.body.classList.remove('printing'); const a=document.getElementById('pdfArea'); if(a)a.remove(); window.removeEventListener('afterprint',cleanup); };
+  window.addEventListener('afterprint',cleanup);
+  setTimeout(()=>{ try{ window.print(); }catch(e){ cleanup(); notify('⚠️ تعذّرت الطباعة','wa'); } setTimeout(cleanup,1500); }, 60);
+}
+window.exportStatementPDF=exportStatementPDF;
+
+function renderStatement(el){
+  let items=buildStatement();
+  // منتقي الشهر: الأشهر المتاحة من الحركات + "الكل"
+  const allMonths=[...new Set(items.map(x=>(x.date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  if(typeof _stmtMonth==='undefined' || (_stmtMonth!=='all' && !allMonths.includes(_stmtMonth))){
+    _stmtMonth = allMonths.length ? allMonths[0] : 'all'; // افتراضياً أحدث شهر فيه حركات
+  }
+  const q=((document.getElementById('actSi')||{}).value||'').trim();
+  if(q) items=items.filter(x=>smartMatch(x.name,q)||smartMatch(x.service,q));
+  if(_stmtMonth!=='all') items=items.filter(x=>(x.date||'').slice(0,7)===_stmtMonth);
+  const _mLabel=ym=>{ if(ym==='all')return 'كل الفترات'; const [y,m]=ym.split('-'); const ar=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']; return ar[parseInt(m)-1]+' '+y; };
+  const monthPicker=`<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.7rem;flex-wrap:wrap">
+    <span style="font-size:.66rem;color:var(--mu);font-weight:700">📅 الشهر:</span>
+    <select onchange="_setStmtMonth(this.value)" style="flex:1;min-width:120px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;color:var(--tx);font-size:.74rem;font-weight:700;padding:.4rem .55rem;cursor:pointer">
+      <option value="all"${_stmtMonth==='all'?' selected':''}>كل الفترات</option>
+      ${allMonths.map(ym=>`<option value="${ym}"${_stmtMonth===ym?' selected':''}>${_mLabel(ym)}</option>`).join('')}
+    </select>
+    <button class="btn bp btn-sm" onclick="exportStatementPDF()" title="تنزيل PDF" style="white-space:nowrap">⬇️ PDF</button>
+  </div>`;
   const totalIn  = items.filter(x=>x.dir==='in').reduce((a,x)=>a+x.amount,0);
   const totalOut = items.filter(x=>x.dir==='out').reduce((a,x)=>a+x.amount,0);
   const net = totalIn - totalOut;
@@ -9504,7 +9582,7 @@ function renderStatement(el){
       <div style="font-size:.98rem;font-weight:900;color:${net>=0?'var(--ok)':'var(--er)'}" dir="rtl">${net>=0?'+':'−'}${Math.abs(net).toFixed(2)} <span style="font-size:.6rem">${CUR}</span></div>
     </div>
   </div>`;
-  if(!items.length){ el.innerHTML=cards+`<div class="empty"><div class="empty-i">📑</div><div class="empty-t">${q?'لا نتائج مطابقة':'لا توجد حركات مالية بعد'}</div></div>`; return; }
+  if(!items.length){ el.innerHTML=monthPicker+cards+`<div class="empty"><div class="empty-i">📑</div><div class="empty-t">${q?'لا نتائج مطابقة':'لا توجد حركات في هذا الشهر'}</div></div>`; return; }
   const rows=items.map(x=>{
     const inn=x.dir==='in';
     const isDep=x.type==='deposit';
@@ -9526,7 +9604,7 @@ function renderStatement(el){
       <div style="font-size:.86rem;font-weight:900;color:${col};white-space:nowrap" dir="rtl">${inn?'+':'−'}${x.amount.toFixed(2)} ${CUR}</div>
     </div>`;
   }).join('');
-  el.innerHTML=cards+`<div style="font-size:.62rem;font-weight:800;color:var(--mu);margin:.2rem 0 .4rem">📋 الحركات (${items.length})</div>`+rows;
+  el.innerHTML=monthPicker+cards+`<div style="font-size:.62rem;font-weight:800;color:var(--mu);margin:.2rem 0 .4rem">📋 الحركات (${items.length})</div>`+rows;
 }
 window.buildStatement=buildStatement;
 
