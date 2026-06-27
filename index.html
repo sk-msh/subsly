@@ -2276,6 +2276,7 @@ header {
     <button class="mn-btn" onclick="swM('finance')"  >📊 التحاليل</button>
     <button class="mn-btn" onclick="swM('monthly')"  >📅 التقرير الشهري</button>
     <button class="mn-btn" onclick="swM('cards')"   >💳 الكروت</button>
+    <button class="mn-btn" onclick="swM('accts')"   >🗂️ الحسابات</button>
     <button class="mn-btn" onclick="swM('prices')"  >🏷️ الأسعار</button>
     <button class="mn-btn" onclick="swM('expenses')" >💸 المصاريف</button>
     <button class="mn-btn" onclick="swM('mysubs')"  >🧾 اشتراكاتي</button>
@@ -3058,7 +3059,7 @@ function buildSalesLog() {
     (c.subscriptions||[]).filter(s => !s.isCardGroup && !s.cancelled).forEach(s => {
       const cst = gCost(s);
       if(s.start) sales.push({
-        date: s.start, price: n2(s.price), cost: cst,
+        date: s.start, price: _origPrice(s), cost: cst,
         label: c.name + ' — ' + s.service, kind: 'new', cid: c.id
       });
       (s.renewHistory||[]).forEach(r => {
@@ -3970,6 +3971,36 @@ function siH(s) {
 // ══════════════════════════════════════════
 // VIEW CUSTOMER
 // ══════════════════════════════════════════
+// لوحة فترات الاشتراك (الأصلي + التجديدات) داخل تبويب الاشتراكات
+function _vsubPeriods(s, cid, srv){
+  const rh = s.renewHistory||[];
+  if(!rh.length) return '';
+  srv = srv || (db.services.find(x=>x.name===s.service)||{color:'#7c6aff'});
+  // بناء الفترات: اشتراك أول بسعره الأصلي ثم كل تجديد بسعره
+  const entries = [];
+  entries.push({label:'اشتراك أول', from:s.start||'', to:rh[0].from, price:_origPrice(s), isOriginal:true});
+  rh.forEach((r,i)=> entries.push({label:'تجديد '+(i+1), from:r.from, to:r.to, price:r.price, renewedAt:r.renewedAt, isOriginal:false}));
+  const total = entries.reduce((a,e)=>a+n2(e.price),0);
+  const exp = _vsubExp.has(s.id);
+  const rows = exp ? `<div style="margin-top:.35rem;display:flex;flex-direction:column;gap:.25rem">
+    ${entries.map(e=>`<div style="display:flex;align-items:center;gap:.4rem;background:var(--s2);border:1px solid var(--b1);border-radius:7px;padding:.32rem .5rem;font-size:.63rem">
+      <span style="font-weight:800;color:${e.isOriginal?srv.color:'var(--ac3)'}">${e.label}</span>
+      ${(e.price!=null&&e.price!=='')?`<span style="font-weight:700;color:var(--ok)" dir="rtl">${n2(e.price).toFixed(2)} ${CUR}</span>`:''}
+      <span style="margin-right:auto;color:var(--mu)" dir="ltr">${e.from?toDMY(e.from):''}${e.to?' → '+toDMY(e.to):''}</span>
+    </div>`).join('')}
+    <div style="font-size:.6rem;color:var(--ok);font-weight:800;text-align:left">∑ إجمالي محتسب: ${total.toFixed(2)} ${CUR}</div>
+  </div>` : '';
+  return `<div style="margin-top:.35rem">
+    <button class="btn bg btn-xs" style="font-size:.6rem;font-weight:700" onclick="event.stopPropagation();toggleVsub('${s.id}','${cid}')">🔄 ${rh.length} تجديد · أول سعر ${_origPrice(s).toFixed(0)} ${CUR} ${exp?'▲':'▼'}</button>
+    ${rows}
+  </div>`;
+}
+function toggleVsub(sid, cid){
+  if(_vsubExp.has(sid)) _vsubExp.delete(sid); else _vsubExp.add(sid);
+  if(cid) viewC(cid);
+}
+window.toggleVsub = toggleVsub;
+
 function viewC(id) {
   const c=db.customers.find(x=>x.id===id); if(!c) return;
   const ini=c.name.trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
@@ -3989,7 +4020,7 @@ function viewC(id) {
     const pid='pv'+uid();const em=gSE(s),pw=gSP(s);
     const dl=s.isDebt&&!s.debtPaid?`<div style="margin-top:.35rem;background:rgba(232,67,147,.05);border:1px solid rgba(232,67,147,.25);border-radius:5px;padding:.3rem .5rem;display:flex;align-items:center;justify-content:space-between;gap:.3rem;flex-wrap:wrap"><span style="font-size:.66rem;color:var(--er);font-weight:700">⚠️ دين: ${subDV(s)} ${CUR}</span><button class="btn bs btn-xs" onclick="paySD('${c.id}','${s.id}')">✓ سدّد</button></div>`:'';
     const acts=`<div style="display:flex;gap:.25rem;margin-top:.35rem;flex-wrap:wrap;align-items:center">${(em||pw)?`<button class="btn bg btn-xs" onclick="copyAllCreds('${c.id}','${s.id}')">📋 نسخ</button>`:''}${s.expiry?`<div style="display:flex;align-items:center;gap:.2rem;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:.18rem .3rem .18rem .18rem"><input id="qp_${s.id}" type="number" step="0.01" min="0" value="${n2(s.price)||''}" dir="ltr" placeholder="السعر" style="width:65px;background:none;border:none;outline:none;font-family:inherit;font-size:.68rem;font-weight:700;color:var(--ok);text-align:center" onclick="event.stopPropagation()" title="السعر — آخر سعر بعت به"><span style="font-size:.58rem;color:var(--mu)">${CUR}</span><button class="btn br btn-xs" style="margin-right:.15rem" onclick="event.stopPropagation();qRenew('${c.id}','${s.id}',document.getElementById('qp_${s.id}').value)">⚡ +${Number(s.months)||1}ش</button></div>`:''}</div>`;
-    return `<div class="vsub"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.25rem;margin-bottom:.35rem"><div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><span style="font-weight:800;font-size:.82rem">${s.service}</span>${s.months?`<span style="font-size:.63rem;color:var(--mu)">${s.months} شهر</span>`:''}${(s.price!=null&&s.price!=='')?`<span style="font-size:.63rem;color:var(--ac3);font-weight:700" dir="rtl"><bdi>${s.price} ${CUR}</bdi></span>`:''}</div><div style="display:flex;align-items:center;gap:.25rem"><span class="eb ${cls}">${badge}</span><span style="font-size:.63rem;color:var(--mu)" dir="ltr">${s.expiry?toDMY(s.expiry):'—'}</span></div></div><div style="display:flex;flex-direction:column;gap:.22rem">${em?`<div class="crow"><span class="clb">الإيميل</span><span class="cval" dir="ltr" id="em_${pid}">${em}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('em_${pid}').textContent,this)">📋</button></div>`:''}${pw?`<div class="crow"><span class="clb">السر</span><span class="cval ph" id="${pid}" dir="ltr">${pw}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${pid}',this)">👁️</button></div>`:''}</div>${acts}${dl}</div>`;
+    return `<div class="vsub"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.25rem;margin-bottom:.35rem"><div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><span style="font-weight:800;font-size:.82rem">${s.service}</span>${s.months?`<span style="font-size:.63rem;color:var(--mu)">${s.months} شهر</span>`:''}${(s.price!=null&&s.price!=='')?`<span style="font-size:.63rem;color:var(--ac3);font-weight:700" dir="rtl"><bdi>${s.price} ${CUR}</bdi></span>`:''}</div><div style="display:flex;align-items:center;gap:.25rem"><span class="eb ${cls}">${badge}</span><span style="font-size:.63rem;color:var(--mu)" dir="ltr">${s.expiry?toDMY(s.expiry):'—'}</span></div></div><div style="display:flex;flex-direction:column;gap:.22rem">${em?`<div class="crow"><span class="clb">الإيميل</span><span class="cval" dir="ltr" id="em_${pid}">${em}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('em_${pid}').textContent,this)">📋</button></div>`:''}${pw?`<div class="crow"><span class="clb">السر</span><span class="cval ph" id="${pid}" dir="ltr">${pw}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${pid}',this)">👁️</button></div>`:''}</div>${_vsubPeriods(s,c.id,srv)}${acts}${dl}</div>`;
   }).join('')||`<div style="color:var(--mu);font-size:.78rem;text-align:center;padding:.7rem">لا توجد اشتراكات</div>`;
   const manD=db.manualDebts.filter(d=>d.customerId===c.id&&!d.paid);
   const mH=manD.length?`<div class="dv" style="color:var(--er)">💸 ديون يدوية</div>`+manD.map(d=>`<div style="background:rgba(232,67,147,.04);border:1px solid rgba(232,67,147,.22);border-radius:7px;padding:.5rem .7rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:.32rem;flex-wrap:wrap;gap:.25rem"><div><div style="font-size:.74rem;font-weight:700">${d.note||'دين'}</div><div style="font-size:.61rem;color:var(--mu)">${d.date?toDMY(d.date):''} — ${d.service||'عام'}</div></div><div style="display:flex;align-items:center;gap:.3rem"><span style="font-weight:900;color:var(--er)">${n2(d.amount).toFixed(2)} ${CUR}</span><button class="btn bs btn-xs" onclick="payMD('${d.id}')">✓</button></div></div>`).join(''):'';
@@ -4050,7 +4081,7 @@ function renderCustHistory(cid) {
         start: s.start || '',
         from: s.start || '',
         to: first.from,
-        price: s.price,
+        price: _origPrice(s),
         months: s.months,
         isOriginal: true
       });
@@ -4530,23 +4561,33 @@ function _renewSub(c, s, opts){
   const fromToday = isExp && (opts.base === 'now'); // للمنتهية فقط: من اليوم بدل تاريخ الانتهاء
   let base = fromToday ? new Date() : new Date(s.expiry + 'T00:00:00');
   if(isNaN(base.getTime())) return false;
-  const prevExpiry = s.expiry, prevPrice = s.price;
+  const prevExpiry = s.expiry, prevPrice = n2(s.price);
   base.setMonth(base.getMonth() + months);
   const newExpiry = base.toISOString().slice(0,10);
-  const newStart  = new Date().toISOString().slice(0,10);
-  // السعر المطبَّق فعلاً (الجديد إن أُدخل وصحيح، وإلا القديم)
+  // بداية الفترة الجديدة: من تاريخ الانتهاء السابق (أو من اليوم للمنتهية)
+  const periodStart = fromToday ? new Date().toISOString().slice(0,10) : prevExpiry;
+  // السعر المطبَّق فعلاً (الجديد إن أُدخل وصحيح، وإلا الحالي)
   let appliedPrice = prevPrice;
   if(opts.price !== undefined && opts.price !== '' && !isNaN(Number(opts.price)) && Number(opts.price) >= 0)
     appliedPrice = Number(opts.price);
+  // احفظ سعر الفترة الأصلية مرة واحدة (للحفاظ على إيرادها وعرضها)
+  if(s.origPrice == null) s.origPrice = n2(s.price);
   if(!s.renewHistory) s.renewHistory = [];
   s.renewHistory.push({
-    from: prevExpiry, to: newExpiry, start: newStart,
+    from: prevExpiry, to: newExpiry, start: periodStart,
     months: months, price: appliedPrice, prevPrice: prevPrice,
     renewedAt: new Date().toISOString()
   });
-  s.expiry = newExpiry; s.months = months; s.start = newStart;
-  if(appliedPrice !== prevPrice) s.price = appliedPrice; // طبّق السعر الجديد على الاشتراك
+  s.expiry = newExpiry; s.months = months;
+  s.price = appliedPrice; // السعر الحالي = آخر تجديد (للعرض)؛ الأصلي محفوظ في origPrice و s.start لم يتغيّر
   return true;
+}
+
+// السعر الأصلي للفترة الأولى (مع استرجاع من السجل للبيانات القديمة)
+function _origPrice(s){
+  if(s.origPrice != null) return n2(s.origPrice);
+  if(s.renewHistory && s.renewHistory[0] && s.renewHistory[0].prevPrice != null) return n2(s.renewHistory[0].prevPrice);
+  return n2(s.price);
 }
 
 function qRenew(cid,sid,newPriceRaw){
@@ -8042,6 +8083,7 @@ function openDashboardCustomize() {
 // ══════════════════════════════════════════
 let _mySubFilt = 'all';
 let _mySubCardsExp = new Set(); // اشتراكات موسّعة لعرض الكروت المرتبطة
+let _vsubExp = new Set(); // اشتراكات زبائن موسّعة لعرض فترات التجديد
 let _mySubEditId = null;
 
 function setMyF(f, btn) {
@@ -9320,10 +9362,84 @@ const ACT_KIND = {
   renew:'renew', bulk_renew:'renew', renew_mysub:'renew',
   pay_debt:'money', edit_cust:'edit', edit_mysub:'edit', edit:'edit', price:'edit'
 };
-const ACT_FILTERS = {all:'الكل', add:'➕ إضافة', del:'🗑️ حذف', renew:'🔄 تجديد', money:'💰 مالي', edit:'✏️ تعديل'};
+const ACT_FILTERS = {all:'الكل', add:'➕ إضافة', del:'🗑️ حذف', renew:'🔄 تجديد', money:'💰 مالي', statement:'📑 كشف حساب', edit:'✏️ تعديل'};
 let _actFilt='all';
 function setActFilt(f){ _actFilt=f; renderActivity(); }
 window.setActFilt=setActFilt;
+// ── كشف الحساب: يجمع كل الحركات المالية (مدفوعات خضراء + مصاريف/اشتراكاتي حمراء) ──
+function buildStatement(){
+  const items=[];
+  // 🟢 مدفوعات الزبائن: اشتراك جديد + تجديد
+  db.customers.forEach(c=>{
+    (c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled).forEach(s=>{
+      if(s.start) items.push({date:s.start, name:c.name, service:s.service, months:s.months, amount:n2(_origPrice(s)), type:'new', dir:'in'});
+      (s.renewHistory||[]).forEach(r=>{
+        const d=(r.renewedAt||'').slice(0,10)||r.start;
+        items.push({date:d, name:c.name, service:s.service, months:r.months, amount:n2(r.price!=null?r.price:s.price), type:'renew', dir:'in'});
+      });
+    });
+  });
+  // 🟢 مبيعات الكروت للزبائن
+  db.cards.filter(c=>c.status==='used'&&c.soldAt&&!c.personalUse).forEach(card=>{
+    const lp=(card.soldPrice!=null&&card.soldPrice!=='')?card.soldPrice:getLPforUSD(card.type,card.value);
+    if(lp) items.push({date:(card.soldAt||'').slice(0,10), name:card.soldTo||'—', service:card.type, months:'', amount:n2(lp), type:'card', dir:'in'});
+  });
+  // 🔴 اشتراكاتي الشخصية
+  (db.personalSubs||[]).forEach(s=>{
+    items.push({date:s.startDate||(s.createdAt||'').slice(0,10), name:'حسابي', service:s.name, months:s.cycle, amount:n2(s.cost), type:'mysub', dir:'out'});
+  });
+  // 🔴 المصاريف
+  (db.expenses||[]).forEach(e=>{
+    items.push({date:e.date||(e.createdAt||'').slice(0,10), name:'حسابي', service:e.desc||'مصروف', months:'', amount:n2(e.amount), type:'expense', dir:'out'});
+  });
+  items.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  return items;
+}
+
+function renderStatement(el){
+  let items=buildStatement();
+  const q=((document.getElementById('actSi')||{}).value||'').trim();
+  if(q) items=items.filter(x=>smartMatch(x.name,q)||smartMatch(x.service,q));
+  const totalIn  = items.filter(x=>x.dir==='in').reduce((a,x)=>a+x.amount,0);
+  const totalOut = items.filter(x=>x.dir==='out').reduce((a,x)=>a+x.amount,0);
+  const net = totalIn - totalOut;
+  const typeLabel={new:'اشتراك جديد', renew:'تجديد', card:'كرت', mysub:'اشتراكي', expense:'مصروف'};
+  const typeIcon ={new:'🛒', renew:'🔄', card:'💳', mysub:'🧾', expense:'💸'};
+  const cards=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.85rem">
+    <div style="background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.25);border-radius:11px;padding:.7rem .5rem;text-align:center">
+      <div style="font-size:.57rem;color:var(--mu);margin-bottom:.28rem">💰 إجمالي المدفوعات</div>
+      <div style="font-size:.98rem;font-weight:900;color:var(--ok)" dir="rtl">${totalIn.toFixed(2)} <span style="font-size:.6rem">${CUR}</span></div>
+    </div>
+    <div style="background:rgba(255,61,128,.08);border:1px solid rgba(255,61,128,.25);border-radius:11px;padding:.7rem .5rem;text-align:center">
+      <div style="font-size:.57rem;color:var(--mu);margin-bottom:.28rem">🧾 المصاريف واشتراكاتي</div>
+      <div style="font-size:.98rem;font-weight:900;color:var(--er)" dir="rtl">−${totalOut.toFixed(2)} <span style="font-size:.6rem">${CUR}</span></div>
+    </div>
+    <div style="background:rgba(124,106,255,.1);border:1px solid rgba(124,106,255,.3);border-radius:11px;padding:.7rem .5rem;text-align:center">
+      <div style="font-size:.57rem;color:var(--mu);margin-bottom:.28rem">⚖️ الصافي</div>
+      <div style="font-size:.98rem;font-weight:900;color:${net>=0?'var(--ok)':'var(--er)'}" dir="rtl">${net>=0?'+':'−'}${Math.abs(net).toFixed(2)} <span style="font-size:.6rem">${CUR}</span></div>
+    </div>
+  </div>`;
+  if(!items.length){ el.innerHTML=cards+`<div class="empty"><div class="empty-i">📑</div><div class="empty-t">${q?'لا نتائج مطابقة':'لا توجد حركات مالية بعد'}</div></div>`; return; }
+  const rows=items.map(x=>{
+    const inn=x.dir==='in';
+    const dur=x.months?`<span style="font-size:.59rem;color:var(--mu)">⏱️ ${x.months} شهر</span>`:'';
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;background:${inn?'rgba(0,200,150,.06)':'rgba(255,61,128,.06)'};border-right:3px solid ${inn?'var(--ok)':'var(--er)'};border-radius:8px;margin-bottom:.28rem">
+      <span style="font-size:.85rem">${typeIcon[x.type]||'•'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.76rem;font-weight:700">${esc(x.name)} <span style="color:var(--mu);font-weight:400">— ${esc(x.service||'')}</span></div>
+        <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:2px">
+          <span style="font-size:.57rem;font-weight:800;padding:.03rem .4rem;border-radius:20px;background:${inn?'rgba(0,200,150,.15)':'rgba(255,61,128,.15)'};color:${inn?'var(--ok)':'var(--er)'}">${typeLabel[x.type]||''}</span>
+          ${dur}
+          ${x.date?`<span style="font-size:.58rem;color:var(--mu)" dir="ltr">${toDMY(x.date)}</span>`:''}
+        </div>
+      </div>
+      <div style="font-size:.86rem;font-weight:900;color:${inn?'var(--ok)':'var(--er)'};white-space:nowrap" dir="rtl">${inn?'+':'−'}${x.amount.toFixed(2)} ${CUR}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML=cards+`<div style="font-size:.62rem;font-weight:800;color:var(--mu);margin:.2rem 0 .4rem">📋 الحركات (${items.length})</div>`+rows;
+}
+window.buildStatement=buildStatement;
+
 function renderActivity() {
   if(!_AUTH_OK) return;
   const el=document.getElementById('actList');if(!el)return;
@@ -9332,16 +9448,18 @@ function renderActivity() {
   // شريط الفلترة
   const fb=document.getElementById('actFilt');
   if(fb){
-    if(!log.length){ fb.innerHTML=''; }
-    else {
-      const cnts={}; log.forEach(a=>{ const k=ACT_KIND[a.a]||'edit'; cnts[k]=(cnts[k]||0)+1; });
-      fb.innerHTML=Object.keys(ACT_FILTERS).map(k=>{
-        if(k!=='all' && !cnts[k]) return '';
-        const n = k==='all'?log.length:cnts[k];
-        return `<button class="ft${_actFilt===k?' on':''}" onclick="setActFilt('${k}')">${ACT_FILTERS[k]} (${n})</button>`;
-      }).join('');
-    }
+    const cnts={}; log.forEach(a=>{ const k=ACT_KIND[a.a]||'edit'; cnts[k]=(cnts[k]||0)+1; });
+    fb.innerHTML=Object.keys(ACT_FILTERS).map(k=>{
+      if(k==='statement') return `<button class="ft${_actFilt===k?' on':''}" onclick="setActFilt('${k}')">${ACT_FILTERS[k]}</button>`;
+      if(k==='all' && !log.length) return '';
+      if(k!=='all' && !cnts[k]) return '';
+      const n = k==='all'?log.length:cnts[k];
+      return `<button class="ft${_actFilt===k?' on':''}" onclick="setActFilt('${k}')">${ACT_FILTERS[k]} (${n})</button>`;
+    }).join('');
   }
+
+  // ── كشف الحساب (عرض مالي مستقل) ──
+  if(_actFilt==='statement'){ renderStatement(el); return; }
 
   if(!log.length){el.innerHTML='<div class="empty"><div class="empty-i">📋</div><div class="empty-t">لا يوجد نشاط بعد</div><div class="empty-s">ستظهر هنا كل العمليات: إضافة، تعديل، تجديد، حذف، سداد</div></div>';return;}
 
