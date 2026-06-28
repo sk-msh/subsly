@@ -3061,17 +3061,35 @@ function buildSalesLog() {
   db.customers.forEach(c => {
     (c.subscriptions||[]).filter(s => !s.isCardGroup && !s.cancelled).forEach(s => {
       const cst = gCost(s);
-      if(s.start) sales.push({
-        date: s.start, price: _origPrice(s), cost: cst,
-        label: c.name + ' — ' + s.service, kind: 'new', cid: c.id
-      });
+      if(s.isDebt){
+        // أساس نقدي: احتسب دفعات الدين الفعلية (عربون/سداد) بتواريخها — لا القيمة الكاملة
+        const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments:(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')}]:[]);
+        let first=true;
+        pays.forEach(p=>{ const a=n2(p.amt); if(a<=0) return;
+          sales.push({ date:(p.at||'').slice(0,10)||s.start||(c.createdAt||'').slice(0,10), price:a, cost:first?cst:0, label:c.name+' — '+s.service, kind:'debt_pay', cid:c.id }); first=false;
+        });
+      } else if(s.start){
+        sales.push({ date: s.start, price: _origPrice(s), cost: cst, label: c.name + ' — ' + s.service, kind: 'new', cid: c.id });
+      }
       (s.renewHistory||[]).forEach(r => {
         const d = (r.renewedAt||'').slice(0,10) || r.start;
-        if(d) sales.push({
-          date: d, price: n2(r.price||s.price), cost: cst,
-          label: c.name + ' — ' + s.service, kind: 'renew', cid: c.id
-        });
+        if(d) sales.push({ date: d, price: n2(r.price||s.price), cost: (r.cost!=null?n2(r.cost):cst), label: c.name + ' — ' + s.service, kind: 'renew', cid: c.id });
       });
+    });
+    // دفعات ديون الكروت المجمّعة
+    (c.subscriptions||[]).filter(s=>s.isCardGroup&&s.isDebt).forEach(s=>{
+      const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments:(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.debtCreatedAt||(c.createdAt||'')}]:[]);
+      pays.forEach(p=>{ const a=n2(p.amt); if(a<=0) return;
+        sales.push({ date:(p.at||'').slice(0,10)||(c.createdAt||'').slice(0,10), price:a, cost:0, label:c.name+' — كروت '+(s.service||''), kind:'debt_pay', cid:c.id });
+      });
+    });
+  });
+  // دفعات الديون اليدوية
+  (db.manualDebts||[]).forEach(d=>{
+    const cust=db.customers.find(x=>x.id===d.customerId);
+    const pays=(Array.isArray(d._payments)&&d._payments.length)?d._payments:(n2(d.paidAmount)>0?[{amt:n2(d.paidAmount),at:d.depositAt||d.date||(d.createdAt||'')}]:[]);
+    pays.forEach(p=>{ const a=n2(p.amt); if(a<=0) return;
+      sales.push({ date:(p.at||'').slice(0,10)||d.date||'', price:a, cost:0, label:(cust?cust.name:'—')+' — '+(d.service||d.note||'دين'), kind:'debt_pay', cid:d.customerId });
     });
   });
   db.cards.filter(c => c.status==='used' && c.soldAt && !c.personalUse).forEach(card => {
@@ -3083,6 +3101,16 @@ function buildSalesLog() {
     });
   });
   return sales;
+}
+
+// تكاليف التشغيل الشهرية الموحّدة (تُستخدم في التحاليل والتقرير الشهري معاً)
+// المصاريف: فعلية للشهر (لمرة واحدة + المتكرّرة) · الاشتراكات الشخصية والحسابات: معدّل شهري
+function _monthOpsCost(ym){
+  const expenses=(db.expenses||[]).filter(e=>((e.date||e.createdAt||'')).slice(0,7)===ym).reduce((a,e)=>e.recur==='yearly'?a+n2(e.amount)/12:a+n2(e.amount),0);
+  const personalCost=(db.personalSubs||[]).filter(s=>s.active!==false).reduce((a,s)=>a+n2(s.cost)/Math.max(1,parseInt(s.cycle)||1),0);
+  // تكلفة الحسابات: التجديدات الفعلية كاملةً في شهر دفعها (من سجل التجديد) — القيمة التي أدخلتها يدوياً
+  const acctCost=(db.accounts||[]).reduce((sum,a)=> sum + (a.payHistory||[]).filter(p=>(p.paidAt||'').slice(0,7)===ym).reduce((t,p)=>t+n2(p.cost),0), 0);
+  return {expenses, personalCost, acctCost, total:expenses+personalCost+acctCost};
 }
 
 const allDebtRows = () => {
@@ -4551,9 +4579,9 @@ function openRenew(id){
   document.getElementById('renewList').innerHTML=ch+selAll+subs.map(s=>{
     const srv=db.services.find(x=>x.name===s.service)||{color:'#7c6aff'};
     const p=gP(s.service);
-    const tOpts=p.tiers.map(t=>{const m=p.type==='months'?(Number(t.months)||1):1;const lb=p.type==='months'?(t.months?t.months+' شهر':'—'):(t.label||'—');return`<option value="${m}">${lb}</option>`;}).join('');
+    const tOpts=p.tiers.map(t=>{const m=p.type==='months'?(Number(t.months)||1):1;const lb=p.type==='months'?(t.months?t.months+' شهر':'—'):(t.label||'—');return`<option value="${m}" data-p="${t.price!=null&&t.price!==''?t.price:''}" data-c="${t.costPrice!=null&&t.costPrice!==''?t.costPrice:''}">${lb}</option>`;}).join('');
     const isExp=du(s.expiry)<0;
-    return`<div class="sent" data-sid="${s.id}" style="margin-bottom:.4rem"><div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;flex-wrap:wrap"><input type="checkbox" class="rchk" checked title="تجديد هذا الاشتراك" style="width:17px;height:17px;accent-color:var(--ac);cursor:pointer;flex-shrink:0"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><strong style="font-size:.8rem">${s.service}</strong><span style="font-size:.63rem;color:${isExp?'var(--er)':'var(--mu)'}" dir="ltr">${toDMY(s.expiry)}${isExp?' (منتهي)':''}</span></div><div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end"><div><label class="fl" style="font-size:.61rem">الباقات</label><select class="fs rsel" style="font-size:.71rem;padding:.25rem .42rem" onchange="this.closest('.sent').querySelector('.rmn').value=this.value">${tOpts||'<option value="1">1 شهر</option>'}</select></div><div><label class="fl" style="font-size:.61rem">يدوي (شهر)</label><input class="fi rmn" type="number" min="1" max="60" value="${Number(s.months)||1}" style="font-size:.71rem;padding:.25rem .42rem;width:72px"></div><div><label class="fl" style="font-size:.61rem">السعر</label><input class="fi rpr" type="number" min="0" step="0.01" value="${s.price!=null&&s.price!==''?s.price:''}" style="font-size:.71rem;padding:.25rem .42rem;width:82px"></div></div></div>`;
+    return`<div class="sent" data-sid="${s.id}" style="margin-bottom:.4rem"><div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;flex-wrap:wrap"><input type="checkbox" class="rchk" checked title="تجديد هذا الاشتراك" style="width:17px;height:17px;accent-color:var(--ac);cursor:pointer;flex-shrink:0"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><strong style="font-size:.8rem">${s.service}</strong><span style="font-size:.63rem;color:${isExp?'var(--er)':'var(--mu)'}" dir="ltr">${toDMY(s.expiry)}${isExp?' (منتهي)':''}</span></div><div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end"><div><label class="fl" style="font-size:.61rem">الباقات</label><select class="fs rsel" style="font-size:.71rem;padding:.25rem .42rem" onchange="const o=this.options[this.selectedIndex],r=this.closest('.sent');r.querySelector('.rmn').value=this.value;if(o.dataset.p!=='')r.querySelector('.rpr').value=o.dataset.p;if(o.dataset.c!=='')r.querySelector('.rcst').value=o.dataset.c;">${tOpts||'<option value="1">1 شهر</option>'}</select></div><div><label class="fl" style="font-size:.61rem">يدوي (شهر)</label><input class="fi rmn" type="number" min="1" max="60" value="${Number(s.months)||1}" style="font-size:.71rem;padding:.25rem .42rem;width:64px"></div><div><label class="fl" style="font-size:.61rem">السعر (بيع)</label><input class="fi rpr" type="number" min="0" step="0.01" value="${s.price!=null&&s.price!==''?s.price:''}" style="font-size:.71rem;padding:.25rem .42rem;width:74px"></div><div><label class="fl" style="font-size:.61rem">التكلفة (شراء)</label><input class="fi rcst" type="number" min="0" step="0.01" value="${gCost(s)||''}" placeholder="0.00" style="font-size:.71rem;padding:.25rem .42rem;width:74px"></div></div></div>`;
   }).join('');
   om('mRenew');
 }
@@ -4574,7 +4602,8 @@ function applyRenew(){
     const sid=el.dataset.sid,s=(c.subscriptions||[]).find(x=>x.id===sid);if(!s||!s.expiry) return;
     const months=Math.max(1,parseInt(el.querySelector('.rmn').value)||1);
     const prRaw=el.querySelector('.rpr').value;
-    if(_renewSub(c, s, {months, base: renewBase, price: prRaw})) cnt++;
+    const cstRaw=(el.querySelector('.rcst')||{}).value;
+    if(_renewSub(c, s, {months, base: renewBase, price: prRaw, cost: cstRaw})) cnt++;
   });
   c.updatedAt=new Date().toISOString();
   save();cm('mRenew');rC();if(document.getElementById('mView').classList.contains('on'))viewC(renewCid);
@@ -4603,12 +4632,16 @@ function _renewSub(c, s, opts){
   let appliedPrice = prevPrice;
   if(opts.price !== undefined && opts.price !== '' && !isNaN(Number(opts.price)) && Number(opts.price) >= 0)
     appliedPrice = Number(opts.price);
+  // التكلفة المطبَّقة فعلاً (الجديدة إن أُدخلت وصحيحة، وإلا تكلفة الشريحة)
+  let appliedCost = gCost(s);
+  if(opts.cost !== undefined && opts.cost !== '' && !isNaN(Number(opts.cost)) && Number(opts.cost) >= 0)
+    appliedCost = Number(opts.cost);
   // احفظ سعر الفترة الأصلية مرة واحدة (للحفاظ على إيرادها وعرضها)
   if(s.origPrice == null) s.origPrice = n2(s.price);
   if(!s.renewHistory) s.renewHistory = [];
   s.renewHistory.push({
     from: prevExpiry, to: newExpiry, start: periodStart,
-    months: months, price: appliedPrice, prevPrice: prevPrice,
+    months: months, price: appliedPrice, prevPrice: prevPrice, cost: appliedCost,
     renewedAt: new Date().toISOString()
   });
   s.expiry = newExpiry; s.months = months;
@@ -4696,9 +4729,9 @@ function shareWA(cid){
 // ══════════════════════════════════════════
 // PAY DEBT
 // ══════════════════════════════════════════
-function paySD(cid,sid){const c=db.customers.find(x=>x.id===cid);if(!c)return;const s=(c.subscriptions||[]).find(x=>x.id===sid);if(!s)return;s.debtPaid=true;s.debtPaidAt=new Date().toISOString();save();rC();rDebts();if(document.getElementById('mView').classList.contains('on'))viewC(cid);notify('✅ تم السداد');}
-function payMD(did){const d=db.manualDebts.find(x=>x.id===did);if(!d)return;d.paid=true;d.paidAt=new Date().toISOString();const cid=d.customerId;const _cn=(db.customers.find(x=>x.id===cid)||{}).name||'';_log('pay_debt','✅ سداد دين: '+_cn+' '+n2(d.amount).toFixed(0)+' '+CUR);save();rDebts();rC();if(document.getElementById('mView').classList.contains('on')){const c=db.customers.find(x=>x.id===cid);if(c)viewC(cid);else cm('mView');}notify('✅ تم السداد');}
-function payCG(cid,sid){const c=db.customers.find(x=>x.id===cid);if(!c)return;const s=(c.subscriptions||[]).find(x=>x.id===sid);if(!s)return;s.debtPaid=true;s.debtPaidAt=new Date().toISOString();db.manualDebts.forEach(d=>{if(d.customerId===cid&&d.service===s.service&&!d.paid)d.paid=true;});_log('pay_debt','✅ سداد ديون '+s.service+' — '+c.name);save();rC();rDebts();if(document.getElementById('mView').classList.contains('on'))viewC(cid);notify('✅ تم سداد ديون '+s.service);}
+function paySD(cid,sid){const c=db.customers.find(x=>x.id===cid);if(!c)return;const s=(c.subscriptions||[]).find(x=>x.id===sid);if(!s)return;const rem=_settleDebtPayment(s,subDV(s),'debtPaidAmount');s.debtPaid=true;s.debtPaidAt=new Date().toISOString();_log('pay_debt','✅ سداد دين: '+c.name+' '+rem.toFixed(0)+' '+CUR);save();rC();rDebts();if(document.getElementById('mView').classList.contains('on'))viewC(cid);notify('✅ تم السداد');}
+function payMD(did){const d=db.manualDebts.find(x=>x.id===did);if(!d)return;_settleDebtPayment(d,n2(d.amount),'paidAmount');d.paid=true;d.paidAt=new Date().toISOString();const cid=d.customerId;const _cn=(db.customers.find(x=>x.id===cid)||{}).name||'';_log('pay_debt','✅ سداد دين: '+_cn+' '+n2(d.amount).toFixed(0)+' '+CUR);save();rDebts();rC();if(document.getElementById('mView').classList.contains('on')){const c=db.customers.find(x=>x.id===cid);if(c)viewC(cid);else cm('mView');}notify('✅ تم السداد');}
+function payCG(cid,sid){const c=db.customers.find(x=>x.id===cid);if(!c)return;const s=(c.subscriptions||[]).find(x=>x.id===sid);if(!s)return;const rem=_settleDebtPayment(s,n2(s.debtAmount),'debtPaidAmount');s.debtPaid=true;s.debtPaidAt=new Date().toISOString();db.manualDebts.forEach(d=>{if(d.customerId===cid&&d.service===s.service&&!d.paid)d.paid=true;});_log('pay_debt','✅ سداد ديون '+s.service+' — '+c.name+' '+rem.toFixed(0)+' '+CUR);save();rC();rDebts();if(document.getElementById('mView').classList.contains('on'))viewC(cid);notify('✅ تم سداد ديون '+s.service);}
 
 // ══════════════════════════════════════════
 // ACCOUNTS
@@ -5645,7 +5678,7 @@ function rFinance(){
   const personalCost = (db.personalSubs||[])
     .filter(s => s.active!==false)
     .reduce((a,s) => a + n2(s.cost)/Math.max(1,parseInt(s.cycle)||1), 0);
-  const opsCostMonthly = acctCost + expCost + personalCost;   // تكاليف تشغيل شهرية متكرّرة
+  const opsCostMonthly = _monthOpsCost(selYM).total;          // تكاليف تشغيل الشهر المحدّد (موحّدة)
   const totalCost = subsCost + opsCostMonthly;                 // تكلفة الدفتر الشهرية (للتفصيل)
 
   // ── سجل المبيعات (مصدر موحّد، يحمل التكلفة لكل عملية) ──
@@ -5661,7 +5694,7 @@ function rFinance(){
   const prevD=new Date(selY,selM-1,1); const prevYM=prevD.getFullYear()+'-'+String(prevD.getMonth()+1).padStart(2,'0');
   const salesPrev=sales.filter(s=>s.date.slice(0,7)===prevYM);
   const prevRev=salesPrev.reduce((a,s)=>a+s.price,0);
-  const prevNet=(prevRev - salesPrev.reduce((a,s)=>a+n2(s.cost),0)) - opsCostMonthly;
+  const prevNet=(prevRev - salesPrev.reduce((a,s)=>a+n2(s.cost),0)) - _monthOpsCost(prevYM).total;
   const dlt=(cur,prev)=>{ if(prev<=0) return cur>0?{t:'جديد',c:'var(--ok)'}:null; const p=Math.round((cur-prev)/prev*100); return {t:(p>=0?'▲':'▼')+Math.abs(p)+'%',c:p>=0?'var(--ok)':'var(--er)'}; };
 
   // قيم متوافقة مع بقية اللوحة (لقطة)
@@ -6147,7 +6180,7 @@ function rMonthly() {
         const ce = ensureCust(c);
         ce.events.push({
           type: s.isDebt ? 'debt_sub' : 'new',
-          service:s.service, price:n2(s.price), cost,
+          service:s.service, price:_origPrice(s), cost,
           date:s.start, months:s.months||1, payMethod:mof(s),
           isDebt:!!s.isDebt, debtPaid:!!s.debtPaid, cancelled:false
         });
@@ -6164,11 +6197,11 @@ function rMonthly() {
         if(rDate && rDate.slice(0,7) === ym) {
           const ce = ensureCust(c);
           ce.events.push({
-            type:'renew', service:s.service, price:n2(r.price||s.price), cost,
+            type:'renew', service:s.service, price:n2(r.price||s.price), cost:(r.cost!=null?n2(r.cost):cost),
             date:rDate, months:r.months||1, payMethod:mof(s),
             isDebt:false, debtPaid:false, cancelled:false
           });
-          ce.totalRev += n2(r.price||s.price); ce.totalCost += cost;
+          ce.totalRev += n2(r.price||s.price); ce.totalCost += (r.cost!=null?n2(r.cost):cost);
           const day = rDate.slice(8,10); dailyRev[day] = (dailyRev[day]||0) + n2(r.price||s.price);
         }
       });
@@ -6235,11 +6268,12 @@ function rMonthly() {
   const totalPaidDebts = paidDebts.reduce((a,d)=>a+d.amt, 0);
 
   // ════════════════════════════════════════
-  // 3. الإجماليات + COGS
+  // 3. الإجماليات + COGS (مصدر موحّد مع التحاليل: buildSalesLog بأساس نقدي)
   // ════════════════════════════════════════
-  const totalRev   = sortedCusts.reduce((a,c)=>a+c.totalRev, 0);
-  const totalCOGS  = sortedCusts.reduce((a,c)=>a+c.totalCost, 0);
-  const totalDebts = sortedCusts.reduce((a,c)=>a+c.totalDebt, 0);
+  const _msales   = buildSalesLog().filter(s => (s.date||'').slice(0,7) === ym);
+  const totalRev   = _msales.reduce((a,s)=>a+n2(s.price), 0);
+  const totalCOGS  = _msales.reduce((a,s)=>a+n2(s.cost), 0);
+  const totalDebts = sortedCusts.reduce((a,c)=>a+c.totalDebt, 0);  // ديون قائمة (للعرض فقط)
   const totalOps   = sortedCusts.reduce((a,c)=>a+c.events.filter(e=>!e.cancelled).length, 0);
   const grossProfit = totalRev - totalCOGS; // ربح إجمالي بعد تكلفة الاشتراكات
 
@@ -6269,17 +6303,15 @@ function rMonthly() {
   const myActiveSubs = (db.personalSubs||[]).filter(s=>s.active!==false);
   const totalMyCost  = myActiveSubs.reduce((a,s)=>a+n2(s.cost)/Math.max(1,parseInt(s.cycle)||1), 0);
 
-  // تكلفة تجديد الحسابات الشهرية (تُطرح من الربح — كانت مفقودة)
-  const acctCostM = db.accounts
-    .filter(a => a.active!==false && n2(a.renewCost)>0)
-    .reduce((a,ac) => a + n2(ac.renewCost)/Math.max(1,parseInt(ac.renewCycle)||1), 0);
+  // تكلفة الحسابات للعرض = التجديدات الفعلية في هذا الشهر (مطابقة للصافي الموحّد)
+  const acctCostM = _monthOpsCost(ym).acctCost;
 
   // ملاحظة: تكلفة الكروت المباعة مُحتسبة أصلاً ضمن COGS (أحداث الزبون)، فلا تُطرح ثانيةً.
 
   // ════════════════════════════════════════
   // 5. صافي الربح الحقيقي (بعد COGS)
   // ════════════════════════════════════════
-  const netProfit  = grossProfit - totalExp - totalMyCost - acctCostM;
+  const netProfit  = grossProfit - _monthOpsCost(ym).total;   // صافي موحّد مع التحاليل
   const profitMargin = totalRev>0 ? (netProfit/totalRev*100) : 0;
 
   // ════════════════════════════════════════
@@ -6640,7 +6672,7 @@ async function exportMonthlyXLSX(ym, mName) {
 
   const totalExp = expRows.reduce((a,r)=>a+r['المبلغ'],0);
   const totalMy  = mySubRows.reduce((a,r)=>a+r['شهرياً'],0);
-  const acctCostX = db.accounts.filter(a=>a.active!==false&&n2(a.renewCost)>0).reduce((a,ac)=>a+n2(ac.renewCost)/Math.max(1,parseInt(ac.renewCycle)||1),0);
+  const acctCostX = _monthOpsCost(ym).acctCost;
   const netProfit = totalRev-totalCOGS-totalExp-totalMy-acctCostX;
 
   const summaryRows = [
@@ -6894,6 +6926,21 @@ function commitDep(inp, kind, cid, oid){
   if(isNaN(v) || v<0) { rDebts(); return; }
   saveDeposit(kind,cid,oid,v);
 }
+// يسجّل دفعة سداد على دين: يحفظ المبلغ المتبقّي بتاريخه مع الإبقاء على أي عربون سابق
+function _settleDebtPayment(obj, full, paidField){
+  const paid=n2(obj[paidField]);
+  const remaining=Math.max(0, full-paid);
+  if(!Array.isArray(obj._payments)) obj._payments=[];
+  // طابِق الدفعات المسجّلة مع المبلغ المدفوع: أي مبلغ سابق غير مُسجَّل يُضاف بتاريخ العربون
+  const recorded=obj._payments.reduce((a,p)=>a+n2(p.amt),0);
+  if(paid - recorded > 0.001) obj._payments.push({amt:paid-recorded, at:obj.depositAt||new Date().toISOString()});
+  // دفعة السداد المتبقّية بتاريخ اليوم
+  if(remaining>0) obj._payments.push({amt:remaining, at:new Date().toISOString()});
+  obj[paidField]=full;
+  obj.depositAt = obj.depositAt || new Date().toISOString();
+  return remaining;
+}
+
 function saveDeposit(kind,cid,oid,amount){
   amount = Math.max(0, amount);
   let obj, total=0, cn='';
@@ -6902,7 +6949,8 @@ function saveDeposit(kind,cid,oid,amount){
     obj = (db.manualDebts||[]).find(x=>x.id===oid); if(!obj) return;
     total = n2(obj.amount); amount = Math.min(amount, total);
     obj.paidAmount = amount;
-    obj.depositAt = amount>0 ? _now : '';   // تاريخ دفع العربون = اليوم
+    obj.depositAt = amount>0 ? _now : '';
+    obj._payments = amount>0 ? [{amt:amount, at:_now}] : [];
     cn = (db.customers.find(c=>c.id===obj.customerId)||{}).name||'';
     if(amount>=total-0.001){ obj.paid=true; obj.paidAt=_now; }
     else { obj.paid=false; delete obj.paidAt; }
@@ -6913,7 +6961,8 @@ function saveDeposit(kind,cid,oid,amount){
     total = kind==='cg' ? n2(obj.debtAmount) : subDV(obj);
     amount = Math.min(amount, total);
     obj.debtPaidAmount = amount;
-    obj.depositAt = amount>0 ? _now : '';   // تاريخ دفع العربون = اليوم
+    obj.depositAt = amount>0 ? _now : '';
+    obj._payments = amount>0 ? [{amt:amount, at:_now}] : [];
     if(amount>=total-0.001){ obj.debtPaid=true; obj.debtPaidAt=_now; }
     else { obj.debtPaid=false; delete obj.debtPaidAt; }
   }
@@ -6951,8 +7000,8 @@ function savePartial(kind,cid,oid,remaining){
   if(isNaN(amt)||amt<=0){ notify('⚠️ أدخل مبلغاً صحيحاً','wa'); return; }
   if(amt>remaining+0.001){ notify('⚠️ المبلغ أكبر من المتبقّي','wa'); return; }
   let obj=null, total=0, cn='';
-  if(kind==='man'){ obj=db.manualDebts.find(x=>x.id===oid); if(!obj)return; total=n2(obj.amount); obj.paidAmount=n2(obj.paidAmount)+amt; obj.depositAt=new Date().toISOString(); cn=(db.customers.find(x=>x.id===obj.customerId)||{}).name||''; if(obj.paidAmount>=total-0.001){obj.paid=true;obj.paidAt=new Date().toISOString();} }
-  else { const c=db.customers.find(x=>x.id===cid); obj=c&&(c.subscriptions||[]).find(x=>x.id===oid); if(!obj)return; cn=c.name; total=kind==='cg'?n2(obj.debtAmount):subDV(obj); obj.debtPaidAmount=n2(obj.debtPaidAmount)+amt; obj.depositAt=new Date().toISOString(); if(obj.debtPaidAmount>=total-0.001){obj.debtPaid=true;obj.debtPaidAt=new Date().toISOString();} }
+  if(kind==='man'){ obj=db.manualDebts.find(x=>x.id===oid); if(!obj)return; total=n2(obj.amount); if(!Array.isArray(obj._payments))obj._payments=n2(obj.paidAmount)>0?[{amt:n2(obj.paidAmount),at:obj.depositAt||new Date().toISOString()}]:[]; obj._payments.push({amt:amt,at:new Date().toISOString()}); obj.paidAmount=n2(obj.paidAmount)+amt; obj.depositAt=new Date().toISOString(); cn=(db.customers.find(x=>x.id===obj.customerId)||{}).name||''; if(obj.paidAmount>=total-0.001){obj.paid=true;obj.paidAt=new Date().toISOString();} }
+  else { const c=db.customers.find(x=>x.id===cid); obj=c&&(c.subscriptions||[]).find(x=>x.id===oid); if(!obj)return; cn=c.name; total=kind==='cg'?n2(obj.debtAmount):subDV(obj); if(!Array.isArray(obj._payments))obj._payments=n2(obj.debtPaidAmount)>0?[{amt:n2(obj.debtPaidAmount),at:obj.depositAt||new Date().toISOString()}]:[]; obj._payments.push({amt:amt,at:new Date().toISOString()}); obj.debtPaidAmount=n2(obj.debtPaidAmount)+amt; obj.depositAt=new Date().toISOString(); if(obj.debtPaidAmount>=total-0.001){obj.debtPaid=true;obj.debtPaidAt=new Date().toISOString();} }
   _log('pay_debt','➗ دفعة جزئية: '+cn+' '+amt.toFixed(0)+' '+CUR);
   save(); closePartial(); rDebts(); rC();
   notify('✅ تم تسجيل دفعة '+amt.toFixed(0)+' '+CUR);
@@ -9428,12 +9477,15 @@ function buildStatement(){
   db.customers.forEach(c=>{
     (c.subscriptions||[]).filter(s=>!s.isCardGroup&&!s.cancelled).forEach(s=>{
       if(s.isDebt){
-        // 🟠 دين: العربون المدفوع فقط — بصرف النظر عن وجود تاريخ بداية
-        const dep=n2(s.debtPaidAmount);
-        if(dep>0){
-          const full=n2(subDV(s));
-          items.push({date:(s.depositAt||'').slice(0,10)||s.start||s.debtCreatedAt||(c.createdAt||'').slice(0,10), name:c.name, service:s.service, months:s.months, amount:dep, type:'deposit', dir:'in', remaining:Math.max(0,full-dep)});
-        }
+        // 🟠 دين: كل دفعة (عربون/سداد) بتاريخها — بصرف النظر عن وجود تاريخ بداية
+        const full=n2(subDV(s));
+        const pays = (Array.isArray(s._payments)&&s._payments.length) ? s._payments
+                   : (n2(s.debtPaidAmount)>0 ? [{amt:n2(s.debtPaidAmount), at:s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')}] : []);
+        let cum=0;
+        pays.forEach(p=>{
+          const a=n2(p.amt); if(a<=0) return; cum+=a;
+          items.push({date:(p.at||'').slice(0,10)||s.start||s.debtCreatedAt||(c.createdAt||'').slice(0,10), name:c.name, service:s.service, months:s.months, amount:a, type:'deposit', dir:'in', remaining:Math.max(0,full-cum)});
+        });
       } else if(s.start){
         items.push({date:s.start, name:c.name, service:s.service, months:s.months, amount:n2(_origPrice(s)), type:'new', dir:'in'});
       }
@@ -9446,17 +9498,19 @@ function buildStatement(){
   // 🟠 عرابين ديون الكروت المجمّعة
   db.customers.forEach(c=>{
     (c.subscriptions||[]).filter(s=>s.isCardGroup&&s.isDebt).forEach(s=>{
-      const dep=n2(s.debtPaidAmount);
-      if(dep>0) items.push({date:(s.depositAt||'').slice(0,10)||s.debtCreatedAt||s.start||(c.createdAt||'').slice(0,10), name:c.name, service:'كروت '+(s.service||''), months:'', amount:dep, type:'deposit', dir:'in', remaining:Math.max(0,n2(s.debtAmount)-dep)});
+      const full=n2(s.debtAmount);
+      const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments:(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.debtCreatedAt||s.start||(c.createdAt||'')}]:[]);
+      let cum=0;
+      pays.forEach(p=>{const a=n2(p.amt);if(a<=0)return;cum+=a;items.push({date:(p.at||'').slice(0,10)||s.debtCreatedAt||(c.createdAt||'').slice(0,10), name:c.name, service:'كروت '+(s.service||''), months:'', amount:a, type:'deposit', dir:'in', remaining:Math.max(0,full-cum)});});
     });
   });
   // 🟠 عرابين الديون اليدوية
   (db.manualDebts||[]).forEach(d=>{
-    const dep=n2(d.paidAmount);
-    if(dep>0){
-      const cust=db.customers.find(x=>x.id===d.customerId);
-      items.push({date:(d.depositAt||'').slice(0,10)||d.date||(d.createdAt||'').slice(0,10), name:cust?cust.name:'—', service:d.service||d.note||'دين', months:'', amount:dep, type:'deposit', dir:'in', remaining:Math.max(0,n2(d.amount)-dep)});
-    }
+    const full=n2(d.amount);
+    const cust=db.customers.find(x=>x.id===d.customerId);
+    const pays=(Array.isArray(d._payments)&&d._payments.length)?d._payments:(n2(d.paidAmount)>0?[{amt:n2(d.paidAmount),at:d.depositAt||d.date||(d.createdAt||'')}]:[]);
+    let cum=0;
+    pays.forEach(p=>{const a=n2(p.amt);if(a<=0)return;cum+=a;items.push({date:(p.at||'').slice(0,10)||d.date||(d.createdAt||'').slice(0,10), name:cust?cust.name:'—', service:d.service||d.note||'دين', months:'', amount:a, type:'deposit', dir:'in', remaining:Math.max(0,full-cum)});});
   });
   // 🟢 مبيعات الكروت للزبائن
   db.cards.filter(c=>c.status==='used'&&c.soldAt&&!c.personalUse).forEach(card=>{
