@@ -3063,7 +3063,10 @@ function buildSalesLog() {
       const cst = gCost(s);
       if(s.isDebt){
         // أساس نقدي: احتسب دفعات الدين الفعلية (عربون/سداد) بتواريخها — لا القيمة الكاملة
-        const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments:(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')}]:[]);
+        const _full=n2(subDV(s));
+        const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments.slice():(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')}]:[]);
+        const _sum=pays.reduce((a,p)=>a+n2(p.amt),0);
+        if(s.debtPaid && _sum < _full-0.001) pays.push({amt:_full-_sum, at:s.debtPaidAt||s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')});
         let first=true;
         pays.forEach(p=>{ const a=n2(p.amt); if(a<=0) return;
           sales.push({ date:(p.at||'').slice(0,10)||s.start||(c.createdAt||'').slice(0,10), price:a, cost:first?cst:0, label:c.name+' — '+s.service, kind:'debt_pay', cid:c.id }); first=false;
@@ -3078,7 +3081,10 @@ function buildSalesLog() {
     });
     // دفعات ديون الكروت المجمّعة
     (c.subscriptions||[]).filter(s=>s.isCardGroup&&s.isDebt).forEach(s=>{
-      const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments:(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.debtCreatedAt||(c.createdAt||'')}]:[]);
+      const _full=n2(s.debtAmount);
+      const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments.slice():(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.debtCreatedAt||(c.createdAt||'')}]:[]);
+      const _sum=pays.reduce((a,p)=>a+n2(p.amt),0);
+      if(s.debtPaid && _sum < _full-0.001) pays.push({amt:_full-_sum, at:s.debtPaidAt||s.depositAt||s.debtCreatedAt||(c.createdAt||'')});
       pays.forEach(p=>{ const a=n2(p.amt); if(a<=0) return;
         sales.push({ date:(p.at||'').slice(0,10)||(c.createdAt||'').slice(0,10), price:a, cost:0, label:c.name+' — كروت '+(s.service||''), kind:'debt_pay', cid:c.id });
       });
@@ -3087,7 +3093,10 @@ function buildSalesLog() {
   // دفعات الديون اليدوية
   (db.manualDebts||[]).forEach(d=>{
     const cust=db.customers.find(x=>x.id===d.customerId);
-    const pays=(Array.isArray(d._payments)&&d._payments.length)?d._payments:(n2(d.paidAmount)>0?[{amt:n2(d.paidAmount),at:d.depositAt||d.date||(d.createdAt||'')}]:[]);
+    const _full=n2(d.amount);
+    const pays=(Array.isArray(d._payments)&&d._payments.length)?d._payments.slice():(n2(d.paidAmount)>0?[{amt:n2(d.paidAmount),at:d.depositAt||d.date||(d.createdAt||'')}]:[]);
+    const _sum=pays.reduce((a,p)=>a+n2(p.amt),0);
+    if(d.paid && _sum < _full-0.001) pays.push({amt:_full-_sum, at:d.paidAt||d.depositAt||d.date||(d.createdAt||'')});
     pays.forEach(p=>{ const a=n2(p.amt); if(a<=0) return;
       sales.push({ date:(p.at||'').slice(0,10)||d.date||'', price:a, cost:0, label:(cust?cust.name:'—')+' — '+(d.service||d.note||'دين'), kind:'debt_pay', cid:d.customerId });
     });
@@ -9479,8 +9488,11 @@ function buildStatement(){
       if(s.isDebt){
         // 🟠 دين: كل دفعة (عربون/سداد) بتاريخها — بصرف النظر عن وجود تاريخ بداية
         const full=n2(subDV(s));
-        const pays = (Array.isArray(s._payments)&&s._payments.length) ? s._payments
+        const pays = (Array.isArray(s._payments)&&s._payments.length) ? s._payments.slice()
                    : (n2(s.debtPaidAmount)>0 ? [{amt:n2(s.debtPaidAmount), at:s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')}] : []);
+        // دين مُعلَّم مسدَّداً لكن سجلّه ناقص (سُدِّد بنسخة قديمة) ⇒ اعترف بالمتبقّي بتاريخ السداد
+        const _sum=pays.reduce((a,p)=>a+n2(p.amt),0);
+        if(s.debtPaid && _sum < full-0.001) pays.push({amt:full-_sum, at:s.debtPaidAt||s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')});
         let cum=0;
         pays.forEach(p=>{
           const a=n2(p.amt); if(a<=0) return; cum+=a;
@@ -9499,7 +9511,9 @@ function buildStatement(){
   db.customers.forEach(c=>{
     (c.subscriptions||[]).filter(s=>s.isCardGroup&&s.isDebt).forEach(s=>{
       const full=n2(s.debtAmount);
-      const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments:(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.debtCreatedAt||s.start||(c.createdAt||'')}]:[]);
+      const pays=(Array.isArray(s._payments)&&s._payments.length)?s._payments.slice():(n2(s.debtPaidAmount)>0?[{amt:n2(s.debtPaidAmount),at:s.depositAt||s.debtCreatedAt||s.start||(c.createdAt||'')}]:[]);
+      const _sum=pays.reduce((a,p)=>a+n2(p.amt),0);
+      if(s.debtPaid && _sum < full-0.001) pays.push({amt:full-_sum, at:s.debtPaidAt||s.depositAt||s.debtCreatedAt||(c.createdAt||'')});
       let cum=0;
       pays.forEach(p=>{const a=n2(p.amt);if(a<=0)return;cum+=a;items.push({date:(p.at||'').slice(0,10)||s.debtCreatedAt||(c.createdAt||'').slice(0,10), name:c.name, service:'كروت '+(s.service||''), months:'', amount:a, type:'deposit', dir:'in', remaining:Math.max(0,full-cum)});});
     });
@@ -9508,7 +9522,9 @@ function buildStatement(){
   (db.manualDebts||[]).forEach(d=>{
     const full=n2(d.amount);
     const cust=db.customers.find(x=>x.id===d.customerId);
-    const pays=(Array.isArray(d._payments)&&d._payments.length)?d._payments:(n2(d.paidAmount)>0?[{amt:n2(d.paidAmount),at:d.depositAt||d.date||(d.createdAt||'')}]:[]);
+    const pays=(Array.isArray(d._payments)&&d._payments.length)?d._payments.slice():(n2(d.paidAmount)>0?[{amt:n2(d.paidAmount),at:d.depositAt||d.date||(d.createdAt||'')}]:[]);
+    const _sum=pays.reduce((a,p)=>a+n2(p.amt),0);
+    if(d.paid && _sum < full-0.001) pays.push({amt:full-_sum, at:d.paidAt||d.depositAt||d.date||(d.createdAt||'')});
     let cum=0;
     pays.forEach(p=>{const a=n2(p.amt);if(a<=0)return;cum+=a;items.push({date:(p.at||'').slice(0,10)||d.date||(d.createdAt||'').slice(0,10), name:cust?cust.name:'—', service:d.service||d.note||'دين', months:'', amount:a, type:'deposit', dir:'in', remaining:Math.max(0,full-cum)});});
   });
