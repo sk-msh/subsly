@@ -5093,16 +5093,15 @@ function tkused(id){
       if(c){
         c.subscriptions=(c.subscriptions||[]).filter(s=>{
           if(s.isCardGroup && Array.isArray(s.cardIds) && s.cardIds.includes(card.id)){
-            const _before=s.cardIds.length;
             s.cardIds=s.cardIds.filter(x=>x!==card.id);
             // مجموعة بلا كروت ⇒ احذفها وألغِ دينها
             if(s.cardIds.length===0) return false;
             if(s.isDebt){
-              // اخصم حصة الكرت: قيمته الفردية إن وُجدت، وإلا حصة متساوية من الدين
-              const _cut = n2(card.debtAmount)>0 ? n2(card.debtAmount) : (_before>0 ? n2(s.debtAmount)/_before : 0);
-              s.debtAmount=Math.max(0,n2(s.debtAmount)-_cut);
-              if(n2(s.debtPaidAmount)>s.debtAmount) s.debtPaidAmount=s.debtAmount;
-              if(s.debtAmount<=0.001){ s.isDebt=false; s.debtAmount=0; s.debtPaid=false; s.debtPaidAmount=0; s._payments=[]; }
+              // الدين = مجموع قيمة الكروت المتبقية (سعر فردي/بيع/قائمة)
+              const gross=s.cardIds.reduce((a,id)=>{ const k=(db.cards||[]).find(x=>x.id===id)||{}; const v=n2(k.debtAmount)>0?n2(k.debtAmount):((k.soldPrice!=null&&k.soldPrice!=='')?n2(k.soldPrice):n2(getLPforUSD(k.type,k.value))); return a+v; },0);
+              s.debtAmount=gross;
+              if(n2(s.debtPaidAmount)>gross) s.debtPaidAmount=gross;
+              if(gross<=0.001){ s.isDebt=false; s.debtAmount=0; s.debtPaid=false; s.debtPaidAmount=0; s._payments=[]; }
             }
           }
           return true;
@@ -10147,19 +10146,18 @@ function _timingSafeEq(a, b) {
       db.settings._costLegacyV4=true;
     }
 
-    // تنظيف مجموعات الكروت: أزل الكروت المُرجَعة (لم تَعُد مملوكة) وصحّح الدين نسبياً — آمن للتكرار
+    // مجموعات الكروت: أزل الكروت المُرجَعة، واجعل الدين = مجموع قيمة الكروت المتبقية (سعر فردي/بيع/قائمة) — آمن للتكرار
     db.customers.forEach(c=>{
       c.subscriptions=(c.subscriptions||[]).filter(s=>{
         if(!s.isCardGroup || !Array.isArray(s.cardIds)) return true;
-        const _before=s.cardIds.length;
         s.cardIds=s.cardIds.filter(id=>{ const k=(db.cards||[]).find(x=>x.id===id); return k && k.status==='used' && k.customerId===c.id; });
-        const _removed=_before-s.cardIds.length;
-        if(_removed>0 && s.isDebt && _before>0){
-          s.debtAmount=Math.max(0, n2(s.debtAmount) * (s.cardIds.length/_before));
-          if(n2(s.debtPaidAmount)>s.debtAmount) s.debtPaidAmount=s.debtAmount;
-        }
         if(s.cardIds.length===0) return false;
-        if(s.isDebt && n2(s.debtAmount)<=0.001){ s.isDebt=false; s.debtAmount=0; s.debtPaid=false; s.debtPaidAmount=0; s._payments=[]; }
+        if(s.isDebt){
+          const gross=s.cardIds.reduce((a,id)=>{ const k=(db.cards||[]).find(x=>x.id===id)||{}; const v=n2(k.debtAmount)>0?n2(k.debtAmount):((k.soldPrice!=null&&k.soldPrice!=='')?n2(k.soldPrice):n2(getLPforUSD(k.type,k.value))); return a+v; },0);
+          s.debtAmount=gross;
+          if(n2(s.debtPaidAmount)>gross) s.debtPaidAmount=gross;
+          if(gross<=0.001){ s.isDebt=false; s.debtAmount=0; s.debtPaid=false; s.debtPaidAmount=0; s._payments=[]; }
+        }
         return true;
       });
     });
