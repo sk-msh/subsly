@@ -3069,14 +3069,14 @@ function buildSalesLog() {
         if(s.debtPaid && _sum < _full-0.001) pays.push({amt:_full-_sum, at:s.debtPaidAt||s.depositAt||s.start||s.debtCreatedAt||(c.createdAt||'')});
         let first=true;
         pays.forEach(p=>{ const a=n2(p.amt); if(a<=0) return;
-          sales.push({ date:(p.at||'').slice(0,10)||s.start||(c.createdAt||'').slice(0,10), price:a, cost:first?cst:0, label:c.name+' — '+s.service, kind:'debt_pay', cid:c.id }); first=false;
+          sales.push({ date:(p.at||'').slice(0,10)||s.start||(c.createdAt||'').slice(0,10), price:a, cost:first?(s.cost!=null&&s.cost!==''?n2(s.cost):0):0, label:c.name+' — '+s.service, kind:'debt_pay', cid:c.id }); first=false;
         });
       } else if(s.start){
-        sales.push({ date: s.start, price: _origPrice(s), cost: cst, label: c.name + ' — ' + s.service, kind: 'new', cid: c.id });
+        sales.push({ date: s.start, price: _origPrice(s), cost: (s.cost!=null&&s.cost!==''?n2(s.cost):0), label: c.name + ' — ' + s.service, kind: 'new', cid: c.id });
       }
       (s.renewHistory||[]).forEach(r => {
         const d = (r.renewedAt||'').slice(0,10) || r.start;
-        if(d) sales.push({ date: d, price: n2(r.price||s.price), cost: (r.cost!=null?n2(r.cost):cst), label: c.name + ' — ' + s.service, kind: 'renew', cid: c.id });
+        if(d) sales.push({ date: d, price: n2(r.price||s.price), cost: (r.cost!=null&&r.cost!==''?n2(r.cost):(s.cost!=null&&s.cost!==''?n2(s.cost):0)), label: c.name + ' — ' + s.service, kind: 'renew', cid: c.id });
       });
     });
     // دفعات ديون الكروت المجمّعة
@@ -3103,7 +3103,7 @@ function buildSalesLog() {
   });
   db.cards.filter(c => c.status==='used' && c.soldAt && !c.personalUse).forEach(card => {
     const lp = (card.soldPrice!=null&&card.soldPrice!=='') ? card.soldPrice : getLPforUSD(card.type, card.value);
-    const cst = n2(card.cost) || (n2(db.settings.usdRate)?n2(card.value)*n2(db.settings.usdRate):0);
+    const cst = (card.cost!=null&&card.cost!=='')?n2(card.cost):0;
     if(lp) sales.push({
       date: card.soldAt.slice(0,10), price: n2(lp), cost: cst,
       label: (card.soldTo||'—') + ' — ' + card.type, kind: 'card'
@@ -3170,6 +3170,8 @@ function ensureC(c) {
     if(s.accountId===undefined) s.accountId='';
     // توافق مع بيانات سابقة: إن كان عليه دين ولا يوجد تاريخ تسجيل، نستخدم تاريخ بداية الاشتراك كأفضل تقدير متاح
     if(s.isDebt && !s.debtCreatedAt) s.debtCreatedAt = s.start || c.createdAt || '';
+    // التقط تكلفة الاشتراك الجديد فقط وقت إنشائه (القديم الفارغ يبقى فارغاً = صفر)
+    if(!s._legacyCost && (s.cost==null||s.cost==='') && (s.start||s.isDebt)) s.cost = gCost(s);
   });
 }
 function ensureK(c) {
@@ -3178,6 +3180,10 @@ function ensureK(c) {
   if(c.linkedSubId===undefined) c.linkedSubId='';
   if(!c.usageMode) c.usageMode='card';
   if(!c.status) c.status='available';
+  // جمّد سعر بيع الكرت المباع (السعر فقط — التكلفة تبقى كما أُدخلت، والقديم الفارغ يبقى فارغاً)
+  if(c.status==='used' && !c.personalUse){
+    if(c.soldPrice==null||c.soldPrice==='') c.soldPrice = n2(getLPforUSD(c.type,c.value));
+  }
   // توافق مع بيانات سابقة: تاريخ بيع الكرت قد يكون غير موجود في الكروت القديمة — يبقى undefined عمداً
   // (لا نخترع تاريخاً غير حقيقي؛ فقط الكروت المباعة حديثاً تُحسب في "مبيعات اليوم/الشهر")
 }
@@ -5079,25 +5085,31 @@ function tkused(id){
   const i=db.cards.findIndex(c=>c.id===id);if(i<0)return;
   if(db.cards[i].status==='used'){
     const card=db.cards[i];
+    const _cid=card.customerId;
     // أزل الكرت من مجموعته واخصم دينه (إرجاع دقيق)
     if(card.customerId){
       const c=db.customers.find(x=>x.id===card.customerId);
-      if(c) (c.subscriptions||[]).forEach(s=>{
-        if(s.isCardGroup && Array.isArray(s.cardIds) && s.cardIds.includes(card.id)){
-          s.cardIds=s.cardIds.filter(x=>x!==card.id);
-          if(n2(card.debtAmount)>0){
-            s.debtAmount=Math.max(0,n2(s.debtAmount)-n2(card.debtAmount));
-            // اخصم من المدفوع بما لا يتجاوز الدين المتبقّي
-            if(n2(s.debtPaidAmount)>s.debtAmount) s.debtPaidAmount=s.debtAmount;
+      if(c){
+        c.subscriptions=(c.subscriptions||[]).filter(s=>{
+          if(s.isCardGroup && Array.isArray(s.cardIds) && s.cardIds.includes(card.id)){
+            s.cardIds=s.cardIds.filter(x=>x!==card.id);
+            if(n2(card.debtAmount)>0) s.debtAmount=Math.max(0,n2(s.debtAmount)-n2(card.debtAmount));
+            // مجموعة بلا كروت ⇒ أزل دينها بالكامل واحذفها
+            if(s.cardIds.length===0){ return false; }
             if(s.debtAmount<=0.001){ s.isDebt=false; s.debtAmount=0; s.debtPaid=false; s.debtPaidAmount=0; s._payments=[]; }
+            else if(n2(s.debtPaidAmount)>s.debtAmount){ s.debtPaidAmount=s.debtAmount; }
           }
-        }
-      });
-      // أزل أي دين يدوي قديم مرتبط بهذا الكرت
+          return true;
+        });
+        c.updatedAt=new Date().toISOString();
+      }
       db.manualDebts=(db.manualDebts||[]).filter(d=>d.cardId!==card.id);
     }
     card.status='available';card.customerId='';card.linkedSubId='';card.personalUse=false;card.personalSubId='';delete card.debtAmount;delete card.soldPrice;delete card.soldAt;
-    save();rK();if(typeof rC==='function')rC();if(typeof rDebts==='function')rDebts();notify('↩️ تم الإرجاع وإلغاء الدين');return;
+    save();rK();if(typeof rKTabs==='function')rKTabs();if(typeof rC==='function')rC();if(typeof rDebts==='function')rDebts();
+    // حدّث بطاقة الزبون المفتوحة
+    if(_cid && document.getElementById('mView') && document.getElementById('mView').classList.contains('on') && typeof viewC==='function') viewC(_cid);
+    notify('↩️ تم الإرجاع وإلغاء الدين');return;
   }
   // open mark used modal
   const card=db.cards[i];
@@ -5199,7 +5211,8 @@ function applyMU(cardId){
   card.status='used';card.usageMode=muUMode;if(lSid)card.linkedSubId=lSid;
   card.soldAt=new Date().toISOString();
   const _spv=parseFloat((document.getElementById('muSP')||{}).value);
-  if(!isNaN(_spv)&&_spv>=0) card.soldPrice=_spv;   // سعر بيع فعلي (يتجاوز سعر القائمة)
+  card.soldPrice = (!isNaN(_spv)&&_spv>=0) ? _spv : n2(getLPforUSD(card.type,card.value));   // جمّد سعر البيع وقت البيع
+  if(card.cost==null||card.cost==='') card.cost = n2(card.value)*n2(db.settings.usdRate||0);   // جمّد التكلفة وقت البيع
   if(cid){
     card.customerId=cid;
     const c=db.customers.find(x=>x.id===cid);
@@ -10113,6 +10126,13 @@ function _timingSafeEq(a, b) {
       db.manualDebts=db.manualDebts.filter(d=>!(typeof d.note==='string' && d.note.indexOf('كرت ')===0 && !d.cardId));
       if(db.manualDebts.length!==before) console.log('أُزيل '+(before-db.manualDebts.length)+' دين كرت مكرّر');
       db.settings._cardDebtDedup=true;
+    }
+
+    // ترحيل لمرة واحدة: تعليم البيانات الحالية كـ"قديمة" — تكلفتها الفارغة تبقى فارغة (صفر) ولا تُملأ بأثر رجعي
+    if(!db.settings._costLegacyV4){
+      db.customers.forEach(c=>(c.subscriptions||[]).forEach(s=>{ if(!s.isCardGroup) s._legacyCost=true; }));
+      (db.cards||[]).forEach(k=>{ k._legacyCost=true; });
+      db.settings._costLegacyV4=true;
     }
 
     // 5. Re-save (migrates plain data, ensures consistency)
