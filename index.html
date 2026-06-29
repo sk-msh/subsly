@@ -3055,6 +3055,8 @@ const getLPforUSD = (type,usdVal) => {
   if(tier&&tier.price!=null&&tier.price!=='') return String(tier.price);
   return calcUL(usdVal)||'';
 };
+// سعر الكرت المعروض: المجمّد (soldPrice) للمباع، والحيّ (سعر القائمة) للمتاح فقط
+function kPrice(k){ return (k && k.soldPrice!=null && k.soldPrice!=='') ? n2(k.soldPrice) : n2(getLPforUSD(k.type,k.value)||0); }
 // ── مصدر موحّد لكل عمليات البيع/التجديد/الكروت (يستخدمه قسم اليوم والمالية معاً) ──
 function buildSalesLog() {
   const sales = [];
@@ -4030,7 +4032,7 @@ function siH(s) {
   if(s.isCardGroup){
     const cards=(s.cardIds||[]).map(id=>db.cards.find(c=>c.id===id)).filter(Boolean);
     const tU=cards.reduce((a,c)=>a+n2(c.value),0);
-    const tL=cards.reduce((a,c)=>a+n2(getLPforUSD(c.type,c.value)||0),0);
+    const tL=cards.reduce((a,c)=>a+kPrice(c),0);
     const db2=s.isDebt&&!s.debtPaid?`<span class="pc pd">⚠️</span>`:'';
     return `<div class="si cg">${dot}<div style="flex:1;min-width:0"><div style="font-size:.72rem;font-weight:700">${s.service} <span class="eb cd">💳 ${cards.length}</span></div><div style="display:flex;gap:.25rem;margin-top:2px;flex-wrap:wrap">${tU?`<span style="font-size:.6rem;font-weight:700;color:var(--ok)">$${tU}</span>`:''}${tL?`<span style="font-size:.6rem;font-weight:700;color:var(--wa)">${tL.toFixed(0)} ${CUR}</span>`:''}${db2}</div></div></div>`;
   }
@@ -4086,9 +4088,9 @@ function viewC(id) {
     if(s.isCardGroup){
       const cards=(s.cardIds||[]).map(id=>db.cards.find(c=>c.id===id)).filter(Boolean);
       const tU=cards.reduce((a,k)=>a+n2(k.value),0);
-      const tL=cards.reduce((a,k)=>a+n2(getLPforUSD(k.type,k.value)||0),0);
+      const tL=cards.reduce((a,k)=>a+kPrice(k),0);
       const dbt=s.isDebt&&!s.debtPaid?`<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(232,67,147,.05);border:1px solid rgba(232,67,147,.22);border-radius:6px;padding:.3rem .5rem;margin-top:.35rem;flex-wrap:wrap;gap:.25rem"><span style="font-size:.68rem;color:var(--er);font-weight:700">⚠️ دين: ${n2(s.debtAmount).toFixed(2)} ${CUR}</span><button class="btn bs btn-xs" onclick="payCG('${c.id}','${s.id}')">✓ سدّد</button></div>`:'';
-      const last3=cards.slice(-3).map(k=>{const ci='vg'+k.id;return`<div style="display:flex;align-items:center;gap:.4rem;background:var(--s1);border:1px solid var(--b1);border-radius:5px;padding:.25rem .5rem;margin-top:.22rem;flex-wrap:wrap">${k.value?`<span style="font-size:.78rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${getLPforUSD(k.type,k.value)?`<span style="font-size:.7rem;font-weight:700;color:var(--wa)" dir="rtl"><bdi>${getLPforUSD(k.type,k.value)} ${CUR}</bdi></span>`:''}<span style="margin-right:auto;font-size:.61rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button></div>`;}).join('');
+      const last3=cards.slice(-3).map(k=>{const ci='vg'+k.id;return`<div style="display:flex;align-items:center;gap:.4rem;background:var(--s1);border:1px solid var(--b1);border-radius:5px;padding:.25rem .5rem;margin-top:.22rem;flex-wrap:wrap">${k.value?`<span style="font-size:.78rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${kPrice(k)?`<span style="font-size:.7rem;font-weight:700;color:var(--wa)" dir="rtl"><bdi>${kPrice(k)} ${CUR}</bdi></span>`:''}<span style="margin-right:auto;font-size:.61rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button></div>`;}).join('');
       return `<div class="vsub" style="border-color:rgba(252,60,68,.25)"><div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin-bottom:.4rem"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><span style="font-weight:800;font-size:.82rem">${s.service}</span><span class="eb cd">💳 ${cards.length}</span>${tU?`<span style="font-size:.68rem;font-weight:700;color:var(--ok)">$${tU}</span>`:''}${tL?`<span style="font-size:.68rem;font-weight:700;color:var(--wa)">${tL.toFixed(0)} ${CUR}</span>`:''}<button class="btn bc btn-xs" style="margin-right:auto" onclick="viewCCards('${c.id}','${s.service}')">عرض الكل</button></div>${last3}${dbt}</div>`;
     }
     let badge,cls;
@@ -4298,10 +4300,10 @@ function viewCCards(cid,srvFilter) {
   document.getElementById('mCCardsT').textContent='💳 '+(srvFilter?srvFilter+' — ':'')+'كروت '+(c?c.name:'')+'  ('+cards.length+')';
   if(!cards.length){document.getElementById('mCCardsList').innerHTML=`<div class="empty"><div class="empty-i">💳</div><div class="empty-t">لا توجد كروت</div></div>`;om('mCCards');return;}
   const tU=cards.reduce((a,k)=>a+n2(k.value),0);
-  const tL=cards.reduce((a,k)=>a+n2(getLPforUSD(k.type,k.value)||0),0);
+  const tL=cards.reduce((a,k)=>a+kPrice(k),0);
   document.getElementById('mCCardsList').innerHTML=
     `<div style="background:rgba(0,206,201,.06);border:1px solid rgba(0,206,201,.28);border-radius:7px;padding:.55rem .8rem;display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:.35rem"><div><div style="font-size:.6rem;color:var(--mu)">عدد</div><div style="font-weight:900;color:var(--cd)">${cards.length}</div></div>${tU?`<div><div style="font-size:.6rem;color:var(--mu)">USD</div><div style="font-weight:900;color:var(--ok)">$${tU.toFixed(0)}</div></div>`:''} ${tL?`<div><div style="font-size:.6rem;color:var(--mu)">${CUR}</div><div style="font-weight:900;color:var(--wa)">${tL.toFixed(0)}</div></div>`:''}</div>`+
-    cards.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map(k=>{const lp=getLPforUSD(k.type,k.value);const ci='vcc'+k.id;return`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:.7rem .85rem"><div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.45rem;flex-wrap:wrap"><span style="font-size:.82rem;font-weight:900">${k.type}</span>${k.value?`<span style="font-size:.88rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${lp?`<span style="font-size:.72rem;font-weight:700;color:var(--wa)" dir="rtl"><bdi>${lp} ${CUR}</bdi></span>`:''}<span style="margin-right:auto;font-size:.63rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span></div><div class="crow"><span class="clb">الكود</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('${ci}').textContent,this)">📋</button></div>${k.note?`<div style="font-size:.63rem;color:var(--mu);margin-top:.28rem">📝 ${k.note}</div>`:''}</div>`;}).join('');
+    cards.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map(k=>{const lp=kPrice(k);const ci='vcc'+k.id;return`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:.7rem .85rem"><div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.45rem;flex-wrap:wrap"><span style="font-size:.82rem;font-weight:900">${k.type}</span>${k.value?`<span style="font-size:.88rem;font-weight:900;color:var(--ok)">$${k.value}</span>`:''}${lp?`<span style="font-size:.72rem;font-weight:700;color:var(--wa)" dir="rtl"><bdi>${lp} ${CUR}</bdi></span>`:''}<span style="margin-right:auto;font-size:.63rem;color:var(--mu)" dir="ltr">📅 ${k.date?toDMY(k.date):'—'}</span></div><div class="crow"><span class="clb">الكود</span><span class="cval ph" id="${ci}" dir="ltr">${k.code}</span><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="rv('${ci}',this)">👁️</button><button class="btn bg btn-xs" style="padding:.06rem .35rem" onclick="cpt(document.getElementById('${ci}').textContent,this)">📋</button></div>${k.note?`<div style="font-size:.63rem;color:var(--mu);margin-top:.28rem">📝 ${k.note}</div>`:''}</div>`;}).join('');
   om('mCCards');
 }
 
@@ -5002,7 +5004,7 @@ function rK(){
   const rK2=card=>{
     const srv=db.services.find(x=>x.name===card.type)||{color:'var(--cd)'};
     const isUsed=card.status==='used';const ci='cd'+card.id;
-    const lp=card.value?getLPforUSD(card.type,card.value):'';
+    const lp=card.value?(isUsed?kPrice(card):getLPforUSD(card.type,card.value)):'';
     // عمر المخزون (للمتاح فقط)
     const ageRef=card.date||(card.createdAt||'').slice(0,10);
     const ageDays=(!isUsed&&ageRef)?Math.max(0,Math.round((Date.now()-new Date(ageRef+'T00:00:00'))/86400000)):null;
@@ -5058,7 +5060,7 @@ function rKSummary(){
   const ym=new Date().toISOString().slice(0,7);
   let invValue=0, soldM=0, costM=0;
   scope.forEach(c=>{
-    const lp=n2(getLPforUSD(c.type,c.value)||0);
+    const lp=kPrice(c);
     if(c.status!=='used') invValue+=lp;
     else if((c.soldAt||'').slice(0,7)===ym && !c.personalUse){ soldM+=(c.soldPrice!=null&&c.soldPrice!=='')?n2(c.soldPrice):lp; costM+=n2(c.cost)||(n2(db.settings.usdRate)?n2(c.value)*n2(db.settings.usdRate):0); }
   });
