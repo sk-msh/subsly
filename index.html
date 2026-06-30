@@ -1547,6 +1547,11 @@ a:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radi
   overflow: hidden;
 }
 #undoToast.on { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+#undoFab{ position:fixed; left:1rem; bottom:calc(5rem + env(safe-area-inset-bottom)); z-index:60; display:none; align-items:center; gap:.4rem; background:var(--ac); color:#fff; border:none; border-radius:30px; padding:.5rem .85rem; font-family:'Cairo',sans-serif; font-size:.78rem; font-weight:800; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.35); }
+#undoFab.on{ display:inline-flex; }
+#undoFab .ufl{ font-size:.76rem; }
+#undoFab .ufc{ background:rgba(255,255,255,.28); border-radius:20px; min-width:1.1rem; height:1.1rem; display:inline-flex; align-items:center; justify-content:center; font-size:.66rem; padding:0 .25rem; }
+#undoFab:active{ transform:scale(.95); }
 @media (max-width: 768px) {
   #undoToast { bottom: calc(5rem + env(safe-area-inset-bottom)); width: calc(100% - 2rem); }
 }
@@ -2620,6 +2625,12 @@ header {
   <div id="undoBar" style="position:absolute;bottom:0;right:0;height:2px;background:var(--ac);width:100%;border-radius:0 0 0 12px"></div>
 </div>
 
+<button id="undoFab" onclick="undoLast()" title="تراجع للخطوة السابقة" aria-label="تراجع">
+  <span style="font-size:1.05rem">↩️</span>
+  <span class="ufl">تراجع</span>
+  <span id="undoFabCount" class="ufc">0</span>
+</button>
+
 <!-- ════ LOGIN OVERLAY (REDESIGNED) ════ -->
 <div id="loginOv">
   <div class="login-card">
@@ -3103,7 +3114,7 @@ function buildSalesLog() {
       sales.push({ date:(p.at||'').slice(0,10)||d.date||'', price:a, cost:0, label:(cust?cust.name:'—')+' — '+(d.service||d.note||'دين'), kind:'debt_pay', cid:d.customerId });
     });
   });
-  db.cards.filter(c => c.status==='used' && c.soldAt && !c.personalUse).forEach(card => {
+  db.cards.filter(c => c.status==='used' && c.soldAt && !c.personalUse && !c.soldAsDebt).forEach(card => {
     const lp = (card.soldPrice!=null&&card.soldPrice!=='') ? card.soldPrice : getLPforUSD(card.type, card.value);
     const cst = (card.cost!=null&&card.cost!=='')?n2(card.cost):0;
     if(lp) sales.push({
@@ -3359,13 +3370,21 @@ function save() {
   if (!_AUTH_OK) return;
   _dataVer++; // إبطال كاش قسم اليوم عند أي تغيير
   db.settings.currency = CUR;
+  const _curJSON = JSON.stringify(db);
+  // مكدّس التراجع: التقط الحالة السابقة قبل الكتابة (فقط عند تغيّر فعلي)
+  if(!_undoing && _snapBefore!==null && _curJSON!==_snapBefore){
+    _undoStack.push(_snapBefore);
+    if(_undoStack.length>40) _undoStack.shift();
+  }
+  _snapBefore = _curJSON;
   // حفظ محلي مشفّر (AES-GCM) — الذاكرة محدّثة فوراً، التشفير غير المتزامن لا يجمّد الواجهة
-  _persistDB(JSON.stringify(db));
+  _persistDB(_curJSON);
   // رفع سحابي فوري مع debounce 800ms
   _syncPending = true;
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(_pushToCloud, 800);
   uh(); triggerAutoSync();
+  if(typeof _updUndoBtn==='function') _updUndoBtn();
 }
 
 // ══════════════════════════════════════════
@@ -3403,6 +3422,7 @@ const TAB_FNS = {
 const _renderedPanels = new Set(['today']); // today rendered on init
 
 function sw(n) {
+  _curTab = n;
   document.querySelectorAll('.tab').forEach(t => {
     const on = t.dataset.p === n;
     t.classList.toggle('on', on);
@@ -5112,7 +5132,7 @@ function tkused(id){
       }
       db.manualDebts=(db.manualDebts||[]).filter(d=>d.cardId!==card.id);
     }
-    card.status='available';card.customerId='';card.linkedSubId='';card.personalUse=false;card.personalSubId='';delete card.debtAmount;delete card.soldPrice;delete card.soldAt;
+    card.status='available';card.customerId='';card.linkedSubId='';card.personalUse=false;card.personalSubId='';delete card.debtAmount;delete card.soldPrice;delete card.soldAt;card.soldAsDebt=false;
     _log('return_card','↩️ إرجاع كرت: '+card.type+(card.value?' ($'+card.value+')':''));
     save();rK();if(typeof rKTabs==='function')rKTabs();if(typeof rC==='function')rC();if(typeof rDebts==='function')rDebts();
     // حدّث بطاقة الزبون المفتوحة
@@ -5231,7 +5251,7 @@ function applyMU(cardId){
       if(!grp){grp={id:uid(),service:card.type,isCardGroup:true,cardIds:[],isDebt:false,debtPaid:false,debtAmount:0};c.subscriptions.push(grp);}
       if(!Array.isArray(grp.cardIds))grp.cardIds=[];
       if(!grp.cardIds.includes(card.id))grp.cardIds.push(card.id);
-      if(asDebt&&dAmt>0){grp.isDebt=true;grp.debtPaid=false;grp.debtAmount=n2(grp.debtAmount)+dAmt;if(!grp.debtCreatedAt)grp.debtCreatedAt=new Date().toISOString();card.debtAmount=dAmt;}else{card.debtAmount=0;}
+      if(asDebt&&dAmt>0){grp.isDebt=true;grp.debtPaid=false;grp.debtAmount=n2(grp.debtAmount)+dAmt;if(!grp.debtCreatedAt)grp.debtCreatedAt=new Date().toISOString();card.debtAmount=dAmt;card.soldAsDebt=true;}else{card.debtAmount=0;card.soldAsDebt=false;}
       if(!card.linkedSubId)card.linkedSubId=grp.id;
       c.updatedAt=new Date().toISOString();
     }
@@ -8792,6 +8812,34 @@ function _openPrintWin(html, title) {
 let _undoTimer = null;
 let _undoData  = null;
 
+// ── مكدّس التراجع الشامل (لكل العمليات، خطوة بخطوة) ──
+let _undoStack = [];
+let _snapBefore = null;
+let _undoing = false;
+let _curTab = 'today';
+
+function _updUndoBtn(){
+  const b=document.getElementById('undoFab'); if(!b) return;
+  if(_undoStack.length>0){ b.classList.add('on'); const c=document.getElementById('undoFabCount'); if(c) c.textContent=_undoStack.length>9?'9+':String(_undoStack.length); }
+  else b.classList.remove('on');
+}
+
+function undoLast(){
+  if(!_undoStack.length){ notify('لا يوجد ما يمكن التراجع عنه','wa'); return; }
+  const prev=_undoStack.pop();
+  let snap; try{ snap=JSON.parse(prev); }catch(e){ notify('تعذّر التراجع','wa'); return; }
+  // استعد الحالة في مكانها (حفاظاً على المراجع)
+  Object.keys(db).forEach(k=>delete db[k]);
+  Object.assign(db, snap);
+  CUR=String((db.settings&&db.settings.currency)||'د.ل');
+  _undoing=true; save(); _undoing=false;
+  // أعد عرض القسم الحالي + الشارات
+  try{ if(_curTab && TAB_FNS[_curTab]) TAB_FNS[_curTab](); }catch(e){ console.error('undo render',e); }
+  try{ if(typeof rDebts==='function' && _curTab!=='debts') {} }catch(e){}
+  _updUndoBtn();
+  notify('↩️ تم التراجع للخطوة السابقة');
+}
+
 function deleteWithUndo({label, doDelete, snapshot, restore, after}) {
   // Execute the delete immediately but keep a snapshot
   _undoData = { snapshot, restore, after };
@@ -9575,7 +9623,7 @@ function buildStatement(){
     pays.forEach(p=>{const a=n2(p.amt);if(a<=0)return;cum+=a;items.push({date:(p.at||'').slice(0,10)||d.date||(d.createdAt||'').slice(0,10), name:cust?cust.name:'—', service:d.service||d.note||'دين', months:'', amount:a, type:'deposit', dir:'in', remaining:Math.max(0,full-cum)});});
   });
   // 🟢 مبيعات الكروت للزبائن
-  db.cards.filter(c=>c.status==='used'&&c.soldAt&&!c.personalUse).forEach(card=>{
+  db.cards.filter(c=>c.status==='used'&&c.soldAt&&!c.personalUse&&!c.soldAsDebt).forEach(card=>{
     const lp=(card.soldPrice!=null&&card.soldPrice!=='')?card.soldPrice:getLPforUSD(card.type,card.value);
     if(lp) items.push({date:(card.soldAt||'').slice(0,10), name:card.soldTo||'—', service:card.type, months:'', amount:n2(lp), type:'card', dir:'in'});
   });
@@ -10169,6 +10217,8 @@ function _timingSafeEq(a, b) {
         if(s.isDebt){
           const gross=s.cardIds.reduce((a,id)=>{ const k=(db.cards||[]).find(x=>x.id===id)||{}; return a+(n2(k.debtAmount)>0?n2(k.debtAmount):0); },0);
           s.debtAmount=gross;
+          // علّم كروت الدين غير المدفوعة حتى لا تظهر كإيراد فوري في كشف الحساب
+          s.cardIds.forEach(id=>{ const k=(db.cards||[]).find(x=>x.id===id); if(k && n2(k.debtAmount)>0) k.soldAsDebt=true; });
           if(n2(s.debtPaidAmount)>gross) s.debtPaidAmount=gross;
           if(gross<=0.001){ s.isDebt=false; s.debtAmount=0; s.debtPaid=false; s.debtPaidAmount=0; s._payments=[]; }
         }
@@ -10190,6 +10240,7 @@ function _timingSafeEq(a, b) {
     // 6. Run app — تظهر البيانات فوراً من localStorage
     _applyStoredAccent();
     rQSB(); rUBan(); rC(); uh(); rToday();
+    _snapBefore = JSON.stringify(db); _undoStack = []; if(typeof _updUndoBtn==='function') _updUndoBtn();
     initDashboard();
     initPushNotifications();
     initTheme();
