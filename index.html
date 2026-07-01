@@ -1547,10 +1547,11 @@ a:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radi
   overflow: hidden;
 }
 #undoToast.on { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
-#undoFab{ position:fixed; left:1rem; bottom:calc(5rem + env(safe-area-inset-bottom)); z-index:60; display:none; align-items:center; gap:.4rem; background:var(--ac); color:#fff; border:none; border-radius:30px; padding:.5rem .85rem; font-family:'Cairo',sans-serif; font-size:.78rem; font-weight:800; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.35); }
-#undoFab.on{ display:inline-flex; }
+#undoFab{ position:fixed; left:1rem; bottom:calc(5rem + env(safe-area-inset-bottom)); z-index:60; display:inline-flex; align-items:center; gap:.4rem; background:var(--ac); color:#fff; border:none; border-radius:30px; padding:.5rem .85rem; font-family:'Cairo',sans-serif; font-size:.78rem; font-weight:800; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.35); transition:opacity .2s; }
+#undoFab.dim{ opacity:.4; }
 #undoFab .ufl{ font-size:.76rem; }
 #undoFab .ufc{ background:rgba(255,255,255,.28); border-radius:20px; min-width:1.1rem; height:1.1rem; display:inline-flex; align-items:center; justify-content:center; font-size:.66rem; padding:0 .25rem; }
+#undoFab.dim .ufc{ display:none; }
 #undoFab:active{ transform:scale(.95); }
 @media (max-width: 768px) {
   #undoToast { bottom: calc(5rem + env(safe-area-inset-bottom)); width: calc(100% - 2rem); }
@@ -2625,7 +2626,7 @@ header {
   <div id="undoBar" style="position:absolute;bottom:0;right:0;height:2px;background:var(--ac);width:100%;border-radius:0 0 0 12px"></div>
 </div>
 
-<button id="undoFab" onclick="undoLast()" title="تراجع للخطوة السابقة" aria-label="تراجع">
+<button id="undoFab" class="dim" onclick="undoLast()" title="تراجع للخطوة السابقة" aria-label="تراجع">
   <span style="font-size:1.05rem">↩️</span>
   <span class="ufl">تراجع</span>
   <span id="undoFabCount" class="ufc">0</span>
@@ -4618,7 +4619,7 @@ function openRenew(id){
     const p=gP(s.service);
     const tOpts=p.tiers.map(t=>{const m=p.type==='months'?(Number(t.months)||1):1;const lb=p.type==='months'?(t.months?t.months+' شهر':'—'):(t.label||'—');return`<option value="${m}" data-p="${t.price!=null&&t.price!==''?t.price:''}" data-c="${t.costPrice!=null&&t.costPrice!==''?t.costPrice:''}">${lb}</option>`;}).join('');
     const isExp=du(s.expiry)<0;
-    return`<div class="sent" data-sid="${s.id}" style="margin-bottom:.4rem"><div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;flex-wrap:wrap"><input type="checkbox" class="rchk" checked title="تجديد هذا الاشتراك" style="width:17px;height:17px;accent-color:var(--ac);cursor:pointer;flex-shrink:0"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><strong style="font-size:.8rem">${s.service}</strong><span style="font-size:.63rem;color:${isExp?'var(--er)':'var(--mu)'}" dir="ltr">${toDMY(s.expiry)}${isExp?' (منتهي)':''}</span></div><div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end"><div><label class="fl" style="font-size:.61rem">الباقات</label><select class="fs rsel" style="font-size:.71rem;padding:.25rem .42rem" onchange="const o=this.options[this.selectedIndex],r=this.closest('.sent');r.querySelector('.rmn').value=this.value;if(o.dataset.p!=='')r.querySelector('.rpr').value=o.dataset.p;if(o.dataset.c!=='')r.querySelector('.rcst').value=o.dataset.c;">${tOpts||'<option value="1">1 شهر</option>'}</select></div><div><label class="fl" style="font-size:.61rem">يدوي (شهر)</label><input class="fi rmn" type="number" min="1" max="60" value="${Number(s.months)||1}" style="font-size:.71rem;padding:.25rem .42rem;width:64px"></div><div><label class="fl" style="font-size:.61rem">السعر (بيع)</label><input class="fi rpr" type="number" min="0" step="0.01" value="${s.price!=null&&s.price!==''?s.price:''}" style="font-size:.71rem;padding:.25rem .42rem;width:74px"></div><div><label class="fl" style="font-size:.61rem">التكلفة (شراء)</label><input class="fi rcst" type="number" min="0" step="0.01" value="${gCost(s)||''}" placeholder="0.00" style="font-size:.71rem;padding:.25rem .42rem;width:74px"></div></div></div>`;
+    return`<div class="sent" data-sid="${s.id}" style="margin-bottom:.4rem"><div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;flex-wrap:wrap"><input type="checkbox" class="rchk" checked title="تجديد هذا الاشتراك" style="width:17px;height:17px;accent-color:var(--ac);cursor:pointer;flex-shrink:0"><div style="width:7px;height:7px;border-radius:50%;background:${srv.color}"></div><strong style="font-size:.8rem">${s.service}</strong><span style="font-size:.63rem;color:${isExp?'var(--er)':'var(--mu)'}" dir="ltr">${toDMY(s.expiry)}${isExp?' (منتهي)':''}</span></div><div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end"><div><label class="fl" style="font-size:.61rem">الباقات</label><select class="fs rsel" style="font-size:.71rem;padding:.25rem .42rem" onchange="const o=this.options[this.selectedIndex],r=this.closest('.sent');r.querySelector('.rmn').value=this.value;if(o.dataset.p!=='')r.querySelector('.rpr').value=o.dataset.p;if(o.dataset.c!=='')r.querySelector('.rcst').value=o.dataset.c;">${tOpts||'<option value="1">1 شهر</option>'}</select></div><div><label class="fl" style="font-size:.61rem">يدوي (شهر)</label><input class="fi rmn" type="number" min="1" max="60" value="${Number(s.months)||1}" style="font-size:.71rem;padding:.25rem .42rem;width:64px"></div><div><label class="fl" style="font-size:.61rem">السعر (بيع)</label><input class="fi rpr" type="number" min="0" step="0.01" value="${s.price!=null&&s.price!==''?s.price:''}" style="font-size:.71rem;padding:.25rem .42rem;width:74px"></div><div><label class="fl" style="font-size:.61rem">التكلفة (شراء)</label><input class="fi rcst" type="number" min="0" step="0.01" value="${gCost(s)||''}" placeholder="0.00" style="font-size:.71rem;padding:.25rem .42rem;width:74px"></div><div><label class="fl" style="font-size:.61rem">طريقة الدفع</label><select class="fs rpay" style="font-size:.71rem;padding:.25rem .42rem"><option value="كاش">💵 كاش</option><option value="حوالة">🏦 حوالة</option><option value="رصيد">📲 رصيد</option></select></div></div></div>`;
   }).join('');
   om('mRenew');
 }
@@ -4640,7 +4641,8 @@ function applyRenew(){
     const months=Math.max(1,parseInt(el.querySelector('.rmn').value)||1);
     const prRaw=el.querySelector('.rpr').value;
     const cstRaw=(el.querySelector('.rcst')||{}).value;
-    if(_renewSub(c, s, {months, base: renewBase, price: prRaw, cost: cstRaw})) cnt++;
+    const payRaw=(el.querySelector('.rpay')||{}).value||'';
+    if(_renewSub(c, s, {months, base: renewBase, price: prRaw, cost: cstRaw, pay: payRaw})) cnt++;
   });
   c.updatedAt=new Date().toISOString();
   save();cm('mRenew');rC();if(document.getElementById('mView').classList.contains('on'))viewC(renewCid);
@@ -4679,7 +4681,7 @@ function _renewSub(c, s, opts){
   s.renewHistory.push({
     from: prevExpiry, to: newExpiry, start: periodStart,
     months: months, price: appliedPrice, prevPrice: prevPrice, cost: appliedCost,
-    renewedAt: new Date().toISOString()
+    pay: opts.pay || '', renewedAt: new Date().toISOString()
   });
   s.expiry = newExpiry; s.months = months;
   s.price = appliedPrice; // السعر الحالي = آخر تجديد (للعرض)؛ الأصلي محفوظ في origPrice و s.start لم يتغيّر
@@ -8820,8 +8822,8 @@ let _curTab = 'today';
 
 function _updUndoBtn(){
   const b=document.getElementById('undoFab'); if(!b) return;
-  if(_undoStack.length>0){ b.classList.add('on'); const c=document.getElementById('undoFabCount'); if(c) c.textContent=_undoStack.length>9?'9+':String(_undoStack.length); }
-  else b.classList.remove('on');
+  if(_undoStack.length>0){ b.classList.remove('dim'); const c=document.getElementById('undoFabCount'); if(c) c.textContent=_undoStack.length>9?'9+':String(_undoStack.length); }
+  else b.classList.add('dim');
 }
 
 function undoLast(){
